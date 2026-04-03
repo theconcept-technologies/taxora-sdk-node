@@ -1,111 +1,241 @@
+<p>
+  <img src="https://taxora.io/assets/logo/taxora_logo.svg" alt="Taxora Logo" width="220"/>
+</p>
+
 # @taxora/sdk
 
-Node.js/TypeScript SDK for the [Taxora VAT Validation API](https://taxora.io).
+> **Official Node.js/TypeScript SDK for the [Taxora VAT Validation API](https://taxora.io)**
+> Validate EU VAT numbers, generate compliance certificates, and integrate VAT checks into your Node.js services — with clean, modern TypeScript and zero runtime dependencies.
 
-## Features
+[![CI](https://github.com/theconcept-technologies/taxora-sdk-node/actions/workflows/ci.yml/badge.svg)](https://github.com/theconcept-technologies/taxora-sdk-node/actions)
+[![npm](https://img.shields.io/npm/v/@taxora/sdk?color=cb3837&logo=npm&label=npm)](https://www.npmjs.com/package/@taxora/sdk)
+[![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](#-testing)
+[![Node](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-- API key + Bearer token authentication with automatic refresh
-- Single and batch VAT number validation
-- VAT state history, search, and certificates
-- Bulk certificate export (ZIP/PDF)
-- Strict TypeScript with full type coverage
-- Native `fetch` (Node 18+) — zero runtime dependencies
-- Dual ESM + CJS output
+---
 
-## Installation
+## 🚀 Overview
+
+The **Taxora SDK** provides a clean, type-safe interface to the [Taxora API](https://taxora.io), supporting:
+
+* ✅ Secure **API-Key** and **Bearer Token** authentication with auto-refresh
+* ✅ Single & multiple VAT validation with AI-based company name matching
+* ✅ VAT state history and full-text search endpoints
+* ✅ Certificate generation (PDF) and bulk/list exports (ZIP or PDF)
+* ✅ Strict TypeScript — full type coverage, zero `any`
+* ✅ Native `fetch` (Node 18+) — **zero runtime dependencies**
+* ✅ Dual **ESM + CJS** output for maximum compatibility
+
+> 🔒 The SDK itself is free to use, but a **Taxora API subscription** is required.
+> Obtain your `x-api-key` from your [Taxora account developer settings](https://app.taxora.io).
+
+---
+
+## 🧮 Installation
 
 ```bash
 npm install @taxora/sdk
 ```
 
-**Requirements:** Node.js 18+
+**Requirements:** Node.js ≥ 18 (uses native `fetch` — no polyfill needed)
 
-## Quick Start
+---
+
+## ⚙️ Quick Start
 
 ```ts
 import { TaxoraClientFactory, Environment } from '@taxora/sdk';
 
 const client = TaxoraClientFactory.create({
-  apiKey: 'your-api-key',
-  environment: Environment.SANDBOX, // default
+  apiKey: 'YOUR_X_API_KEY',
+  environment: Environment.SANDBOX, // or Environment.PRODUCTION
 });
 
-// Authenticate
-await client.auth.login('user@example.com', 'password');
+// 1️⃣ Authenticate
+await client.auth.login('user@example.com', 'superSecret');
 
-// Validate a VAT number
-const vat = await client.vat.validate('ATU12345678', 'Alpha Handels GmbH');
-console.log(vat.state);        // 'valid'
-console.log(vat.score);        // 0.95
-console.log(vat.companyName);  // 'Alpha Handels GmbH'
+// 2️⃣ Validate a VAT number
+const vat = await client.vat.validate('ATU12345678', 'Example GmbH');
+console.log(vat.state);        // 'valid' | 'invalid' | 'fraud' | 'unknown'
+console.log(vat.companyName);  // Official company name from registry
+console.log(vat.score);        // Overall confidence score (0.0 – 1.0)
 
-// Fetch company context
+for (const step of vat.breakdown ?? []) {
+  console.log(`${step.stepName} → ${step.scoreContribution}`);
+}
+
+// Optional: typed address input for fallback name scoring
+import { VatValidationAddressInput } from '@taxora/sdk';
+
+const addressInput = new VatValidationAddressInput({
+  addressLine1: 'Ringstraße 1',
+  postalCode: '1010',
+  city: 'Vienna',
+  countryCode: 'AT',
+});
+const vatWithAddress = await client.vat.validate('ATU12345678', 'Example GmbH', 'vies', addressInput);
+
+// 3️⃣ Access company context
 const company = await client.company.get();
-console.log(company);
+
+// 4️⃣ Export certificates
+const exportJob = await client.vat.certificatesBulkExport('2024-01-01', '2024-12-31');
+const zip = await client.vat.downloadBulkExport(exportJob.exportId);
+import { writeFileSync } from 'fs';
+writeFileSync('certificates.zip', zip);
 ```
 
-## Authentication
+`vat.validate()` returns a `VatResource` with the canonical VAT UID, status, company data, and optional scoring details. The `score` reflects overall confidence (higher is better), while `breakdown` is an array of `ScoreBreakdown` objects describing each validation step, its score contribution, and metadata (e.g. matched addresses or mismatched fields).
 
-### Email / Password
+Need a custom HTTP client (e.g. for logging or retries)? Pass it via the factory:
 
 ```ts
-const token = await client.auth.login('user@example.com', 'password');
+import { TaxoraClientFactory, HttpClientInterface } from '@taxora/sdk';
+
+class LoggingHttpClient implements HttpClientInterface {
+  async request(method: string, url: string, options?: RequestInit): Promise<Response> {
+    console.log(`→ ${method} ${url}`);
+    return fetch(url, { ...options, method });
+  }
+}
+
+const client = TaxoraClientFactory.create({
+  apiKey: 'YOUR_X_API_KEY',
+  httpClient: new LoggingHttpClient(),
+});
 ```
 
-### Client ID / Secret
+---
+
+## 🧩 Architecture
+
+The SDK follows clean separation of concerns:
+
+```
+TaxoraClientFactory.create()
+  └── TaxoraClient
+        ├── auth    → AuthEndpoint    (login, loginWithClientId, refresh)
+        ├── vat     → VatEndpoint     (validate, history, search, certificates)
+        └── company → CompanyEndpoint (company info)
+```
+
+Each endpoint handles:
+
+* Request signing with `x-api-key`
+* Bearer token injection and proactive refresh if expired
+* JSON/binary response parsing into typed DTOs
+
+`VatEndpoint` and `CompanyEndpoint` use the `AuthRetryHttpClient` wrapper, which transparently handles preemptive token refresh and 401 retry — `AuthEndpoint` always uses the raw HTTP client to avoid circular refresh calls.
+
+---
+
+## 📦 DTOs
+
+| Class                       | Description                                                                                          |
+| --------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `VatResource`               | Single VAT validation result: state, score, breakdown, company name, address, provider document      |
+| `VatCollection`             | Iterable collection of `VatResource` objects with optional pagination `self` link                    |
+| `ScoreBreakdown`            | Per-step scoring fragment: step name, score contribution, and metadata context                       |
+| `CompanyAddress`            | Structured company address; assembles `fullAddress` from components or parses JSON strings           |
+| `VatValidationAddressInput` | Typed input for address-based fallback scoring (validates lengths, country code format)               |
+| `Token`                     | Access token with type and expiry; 15-second buffer for proactive refresh                            |
+| `VatCertificateExport`      | Bulk export job reference (`exportId` + optional message)                                            |
+| `ProviderDocument`          | Attached provider document metadata (type, date, MIME, hash, nested line item)                      |
+
+All DTOs expose `toArray()` for serialization and a static `fromArray()` factory.
 
 ```ts
-const token = await client.auth.loginWithClientId('my-client-id', 'secret');
-// or equivalently:
+const dto = await client.vat.validate('ATU12345678');
+console.log(dto.toArray());
+```
+
+---
+
+## 🔄 Authentication Flow
+
+### 1. Login
+
+```ts
+// Email + password
+await client.auth.login('user@example.com', 'password', 'my-server-01');
+// device_name is optional; omitted value falls back to os.hostname()
+
+// Client ID + secret
+await client.auth.loginWithClientId('client_abc123', 'client-secret', 'integration-box');
+
+// Explicit identifier enum
 import { LoginIdentifier } from '@taxora/sdk';
-await client.auth.login('my-client-id', 'secret', undefined, LoginIdentifier.CLIENT_ID);
+await client.auth.login('client_abc123', 'client-secret', undefined, LoginIdentifier.CLIENT_ID);
 ```
 
-### Manual Token Refresh
+→ Stores and returns a `Token` DTO (valid for ~3600 seconds).
+
+### 2. Auto-refresh
+
+The SDK automatically refreshes the token in two scenarios:
+
+| Trigger | Behaviour |
+|---|---|
+| **Preemptive** (token expired + 15 s buffer) | Refreshes before the next request |
+| **Reactive** (API returns `401`) | Refreshes once and retries the original request |
+
+You never need to call `refresh()` manually in normal usage.
+
+### 3. Manual refresh
 
 ```ts
-const refreshed = await client.auth.refresh();
+await client.auth.refresh();
 ```
 
-### Automatic Token Refresh
+### 4. Custom token storage
 
-The SDK automatically refreshes the Bearer token when:
+By default, tokens are stored in-memory and lost on process restart. Provide your own storage for persistence:
 
-1. **Preemptive**: The stored token has expired (15-second buffer) — refreshes before the request
-2. **Reactive**: A `401 Unauthorized` response is received — refreshes and retries once
+```ts
+import { TokenStorageInterface, Token } from '@taxora/sdk';
 
-You do not need to handle token refresh manually in normal usage.
+class RedisTokenStorage implements TokenStorageInterface {
+  get(): Token | null      { /* read from Redis */ return null; }
+  set(token: Token): void  { /* write with TTL = token.expiresAt */ }
+  clear(): void            { /* delete key */ }
+}
 
-## VAT Validation
+const client = TaxoraClientFactory.create({
+  apiKey: 'YOUR_X_API_KEY',
+  tokenStorage: new RedisTokenStorage(),
+});
+```
+
+---
+
+## 🧾 VAT Validation
 
 ### Single Validation
 
 ```ts
-import { VatValidationAddressInput } from '@taxora/sdk';
-
-// Basic
+// Basic — state only
 const vat = await client.vat.validate('ATU12345678');
 
 // With company name matching
 const vat = await client.vat.validate('ATU12345678', 'Alpha Handels GmbH');
 
-// With address input for score enhancement
-const addressInput = new VatValidationAddressInput({
-  addressLine1: 'Ringstraße 1',
-  postalCode: '1010',
+// With address input for enhanced score
+const vat = await client.vat.validate('ATU12345678', 'Alpha Handels GmbH', 'vies', {
+  address_line_1: 'Ringstraße 1',
+  postal_code: '1010',
   city: 'Wien',
-  countryCode: 'AT',
+  country_code: 'AT',
 });
-const vat = await client.vat.validate('ATU12345678', 'Alpha Handels GmbH', undefined, addressInput);
 
-console.log(vat.state);         // VatState.VALID | INVALID | FRAUD | UNKNOWN
-console.log(vat.score);         // 0.0 – 1.0
-console.log(vat.breakdown);     // ScoreBreakdown[]
-console.log(vat.companyName);   // Official name from registry
+console.log(vat.state);                    // VatState value
+console.log(vat.score);                    // 0.0 – 1.0
 console.log(vat.companyAddress?.toString()); // Full address string
+console.log(vat.getBackendLink());         // https://app.taxora.io/vat/history/{uuid}
 ```
 
-### Schema Validation (format only)
+### Schema Validation (format check only)
 
 ```ts
 const result = await client.vat.validateSchema('ATU12345678');
@@ -122,6 +252,7 @@ const collection = await client.vat.validateMultiple(
 for (const vat of collection) {
   console.log(vat.vatUid, vat.state);
 }
+console.log(collection.length); // 2
 ```
 
 ### VAT State Snapshot
@@ -133,11 +264,8 @@ const vat = await client.vat.state('ATU12345678');
 ### History
 
 ```ts
-// All history
-const history = await client.vat.history();
-
-// Filtered by VAT number
-const history = await client.vat.history('ATU12345678');
+const history = await client.vat.history();          // all entries
+const history = await client.vat.history('ATU12345678'); // filtered
 
 for (const entry of history) {
   console.log(entry.checkedAt, entry.state);
@@ -147,10 +275,12 @@ for (const entry of history) {
 ### Search
 
 ```ts
-const results = await client.vat.search('Alpha Handels', 25);
+const results = await client.vat.search('Alpha Handels', 25 /* perPage */);
 ```
 
-## Certificates
+---
+
+## 📜 Certificates
 
 ### Single Certificate (PDF)
 
@@ -162,19 +292,18 @@ const pdf = await client.vat.certificate('uuid-123', Language.GERMAN);
 writeFileSync('certificate.pdf', pdf);
 ```
 
-### Bulk Export
+### Bulk Export (ZIP)
 
 ```ts
 const exportJob = await client.vat.certificatesBulkExport(
-  '2024-01-01',
+  '2024-01-01',          // or new Date('2024-01-01')
   '2024-12-31',
-  ['AT', 'DE'],        // optional country filter
-  Language.ENGLISH,    // optional language
+  ['AT', 'DE'],          // optional: filter by country
+  Language.ENGLISH,      // optional: language
 );
 
-console.log(exportJob.exportId); // Use this to poll/download
+console.log(exportJob.exportId); // poll or use directly
 
-// Download when ready
 const zip = await client.vat.downloadBulkExport(exportJob.exportId);
 writeFileSync('certificates.zip', zip);
 ```
@@ -188,57 +317,50 @@ const exportJob = await client.vat.certificatesListExport(
 );
 ```
 
-## Environments
+---
 
-| Environment | Base URL |
-|---|---|
-| `Environment.SANDBOX` | `https://sandbox.taxora.io/v1` |
-| `Environment.PRODUCTION` | `https://api.taxora.io/v1` |
+## 🌍 Environments
+
+| Environment            | Base URL                        |
+| ---------------------- | ------------------------------- |
+| `Environment.SANDBOX`  | `https://sandbox.taxora.io/v1`  |
+| `Environment.PRODUCTION` | `https://api.taxora.io/v1`    |
 
 ```ts
-import { TaxoraClientFactory, Environment } from '@taxora/sdk';
-
 const client = TaxoraClientFactory.create({
-  apiKey: 'your-api-key',
+  apiKey: 'YOUR_X_API_KEY',
   environment: Environment.PRODUCTION,
 });
 ```
 
-## Token Storage
+Need sandbox sample data? Known VAT UIDs with deterministic responses live in `tests/fixtures/SandboxVatFixtures.ts`.
 
-By default, tokens are stored in-memory and lost on process restart. You can provide a custom storage implementation:
+---
+
+## ⚠️ Error Handling
 
 ```ts
-import { TokenStorageInterface, Token } from '@taxora/sdk';
+import { AuthenticationException, HttpException, ValidationException } from '@taxora/sdk';
 
-class RedisTokenStorage implements TokenStorageInterface {
-  get(): Token | null { /* read from Redis */ }
-  set(token: Token): void { /* write to Redis with TTL */ }
-  clear(): void { /* delete from Redis */ }
+try {
+  await client.vat.validate('ATU12345678');
+} catch (err) {
+  if (err instanceof AuthenticationException) {
+    // HTTP 401 — credentials invalid or token refresh failed
+    console.error('Auth failed:', err.message);
+  } else if (err instanceof ValidationException) {
+    // HTTP 422 — request payload rejected by the API
+    console.error('Validation errors:', err.getErrors()); // Record<string, string[]>
+  } else if (err instanceof HttpException) {
+    // Any other HTTP error
+    console.error(`HTTP ${err.getStatusCode()}:`, err.getResponseBody());
+  }
 }
-
-const client = TaxoraClientFactory.create({
-  apiKey: 'your-api-key',
-  tokenStorage: new RedisTokenStorage(),
-});
 ```
 
-## DTOs
+---
 
-| Class | Description |
-|---|---|
-| `Token` | Access token with expiry |
-| `VatResource` | Single VAT validation result |
-| `VatCollection` | Iterable collection of `VatResource` |
-| `ScoreBreakdown` | Per-step scoring breakdown |
-| `CompanyAddress` | Structured company address |
-| `VatValidationAddressInput` | Input for address-based scoring |
-| `VatCertificateExport` | Bulk export job reference |
-| `ProviderDocument` | Attached provider document metadata |
-
-All DTOs implement `toArray()` and a static `fromArray()` factory.
-
-## VatState Enum
+## 🔌 VatState Helpers
 
 ```ts
 import { VatState, getFailedVatStates, describeVatState } from '@taxora/sdk';
@@ -248,77 +370,64 @@ VatState.INVALID  // 'invalid'
 VatState.FRAUD    // 'fraud'
 VatState.UNKNOWN  // 'unknown'
 
-getFailedVatStates()            // [VatState.INVALID, VatState.FRAUD]
-describeVatState(VatState.VALID) // 'The VAT number is valid and active.'
+getFailedVatStates()              // ['invalid', 'fraud']
+describeVatState(VatState.VALID)  // 'The VAT number is valid and active.'
 ```
 
-## Error Handling
+---
 
-```ts
-import { AuthenticationException, HttpException, ValidationException } from '@taxora/sdk';
-
-try {
-  await client.vat.validate('ATU12345678');
-} catch (err) {
-  if (err instanceof AuthenticationException) {
-    // 401 — login again
-  } else if (err instanceof ValidationException) {
-    console.log(err.getErrors()); // Record<string, string[]>
-  } else if (err instanceof HttpException) {
-    console.log(err.getStatusCode(), err.getResponseBody());
-  }
-}
-```
-
-## Custom HTTP Client
-
-```ts
-import { HttpClientInterface } from '@taxora/sdk';
-
-class CustomHttpClient implements HttpClientInterface {
-  async request(method: string, url: string, options?: RequestInit): Promise<Response> {
-    // custom implementation
-    return fetch(url, { ...options, method });
-  }
-}
-
-const client = TaxoraClientFactory.create({
-  apiKey: 'your-api-key',
-  httpClient: new CustomHttpClient(),
-});
-```
-
-## Architecture
-
-```
-TaxoraClientFactory.create()
-  └── TaxoraClient
-        ├── auth    → AuthEndpoint   (raw HTTP, no retry interception)
-        ├── vat     → VatEndpoint    (AuthRetryHttpClient wrapper)
-        └── company → CompanyEndpoint (AuthRetryHttpClient wrapper)
-
-AuthRetryHttpClient
-  ├── Preemptive refresh on expired token
-  ├── Reactive refresh + retry on 401
-  └── Injects Authorization: Bearer <token>
-```
-
-## Testing
+## 🧪 Testing
 
 ```bash
-npm test             # Run all tests
-npm run test:coverage  # Run with coverage report
-npm run test:watch   # Watch mode
+npm test                # Run all 129 tests
+npm run test:coverage   # Run with v8 coverage report
+npm run test:watch      # Watch mode during development
 ```
 
-Coverage target: ≥ 80% lines, branches, functions.
+CI runs on **Node 18**, **20**, and **22**, verifying:
 
-## Build
+* 129 Vitest unit tests across 18 test files
+* 97.8 % statement coverage / 87 % branch coverage / 100 % function coverage
+* Strict TypeScript compilation
+
+---
+
+## 🏗️ Build
 
 ```bash
-npm run build  # Produces dist/ with ESM + CJS + type declarations
+npm run build
+# → dist/index.js   (ESM)
+# → dist/index.cjs  (CommonJS)
+# → dist/index.d.ts (TypeScript declarations)
 ```
 
-## License
+---
 
-MIT
+## ⚠️ Deprecations
+
+So fresh there aren't even any deprecated features yet. Check back in a few months when we're on v47 and have made some regrettable decisions. 🎉
+
+---
+
+## 🪪 License
+
+Licensed under the **MIT License** © 2025 [theconcept technologies](https://www.theconcept-technologies.com).
+The SDK is open-source, but API usage requires a valid **Taxora subscription**.
+
+---
+
+## 🤝 Contributing
+
+Contributions and pull requests are welcome!
+
+* Follow the existing TypeScript code style (strict mode, no `any`).
+* Run `npm test` before submitting a PR.
+* Ensure new endpoints include DTOs + tests.
+
+---
+
+## 💬 Support
+
+Need help or enterprise support?
+📧 **[support@taxora.io](mailto:support@taxora.io)**
+🌐 [https://taxora.io](https://taxora.io)
