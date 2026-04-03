@@ -20,9 +20,7 @@ function makeEndpoint(responses: Response[]) {
 describe('CompanyEndpoint.get', () => {
   it('returns company payload with correct headers', async () => {
     const companyData = { id: 1, name: 'Test Company', vat_id: 'ATU12345678' };
-    const { endpoint, client } = makeEndpoint([
-      SequenceHttpClient.jsonResponse({ success: true, data: companyData }),
-    ]);
+    const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true, data: companyData })]);
 
     const result = await endpoint.get();
 
@@ -39,18 +37,14 @@ describe('CompanyEndpoint.get', () => {
 
   it('returns raw payload when no data wrapper', async () => {
     const companyData = { id: 2, name: 'Another Company' };
-    const { endpoint } = makeEndpoint([
-      SequenceHttpClient.jsonResponse(companyData),
-    ]);
+    const { endpoint } = makeEndpoint([SequenceHttpClient.jsonResponse(companyData)]);
 
     const result = await endpoint.get();
     expect(result).toEqual(companyData);
   });
 
   it('throws HttpException on 500', async () => {
-    const { endpoint } = makeEndpoint([
-      SequenceHttpClient.jsonResponse({ message: 'Internal Server Error' }, 500),
-    ]);
+    const { endpoint } = makeEndpoint([SequenceHttpClient.jsonResponse({ message: 'Internal Server Error' }, 500)]);
 
     await expect(endpoint.get()).rejects.toThrow(HttpException);
   });

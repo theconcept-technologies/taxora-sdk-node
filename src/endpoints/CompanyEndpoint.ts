@@ -1,6 +1,6 @@
 import { HttpException } from '../exceptions/HttpException.js';
-import { HttpClientInterface } from '../http/HttpClientInterface.js';
-import { TokenStorageInterface } from '../http/TokenStorageInterface.js';
+import { type HttpClientInterface } from '../http/HttpClientInterface.js';
+import { type TokenStorageInterface } from '../http/TokenStorageInterface.js';
 
 export class CompanyEndpoint {
   constructor(

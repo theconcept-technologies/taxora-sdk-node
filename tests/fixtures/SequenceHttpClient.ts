@@ -1,4 +1,4 @@
-import { HttpClientInterface } from '../../src/http/HttpClientInterface.js';
+import { type HttpClientInterface } from '../../src/http/HttpClientInterface.js';
 
 interface RecordedRequest {
   method: string;

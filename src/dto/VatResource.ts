@@ -35,9 +35,10 @@ export class VatResource {
     };
 
     const stateRaw = str('state');
-    const state = stateRaw !== undefined && Object.values(VatState).includes(stateRaw as VatState)
-      ? (stateRaw as VatState)
-      : undefined;
+    const state =
+      stateRaw !== undefined && Object.values(VatState).includes(stateRaw as VatState)
+        ? (stateRaw as VatState)
+        : undefined;
 
     const checkedAt = str('checked_at') ? new Date(data['checked_at'] as string) : undefined;
     const providerLastCheckedAt = str('provider_last_checked_at')

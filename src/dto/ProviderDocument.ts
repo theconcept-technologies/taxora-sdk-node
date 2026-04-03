@@ -21,9 +21,7 @@ export class ProviderDocument {
     const d = data as Record<string, unknown>;
 
     const documentDate =
-      typeof d['document_date'] === 'string' && d['document_date']
-        ? new Date(d['document_date'])
-        : null;
+      typeof d['document_date'] === 'string' && d['document_date'] ? new Date(d['document_date']) : null;
 
     return new ProviderDocument(
       typeof d['id'] === 'number' ? d['id'] : null,

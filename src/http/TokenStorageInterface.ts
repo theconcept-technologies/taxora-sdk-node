@@ -1,4 +1,4 @@
-import { Token } from '../dto/Token.js';
+import { type Token } from '../dto/Token.js';
 
 export interface TokenStorageInterface {
   get(): Token | null;

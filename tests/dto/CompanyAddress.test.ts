@@ -27,12 +27,15 @@ describe('CompanyAddress', () => {
   });
 
   it('assembles fullAddress from components when missing', () => {
-    const address = CompanyAddress.fromArray({
-      street: 'Hauptstraße 12',
-      postal_code: '10115',
-      city: 'Berlin',
-      country: 'DE',
-    }, null);
+    const address = CompanyAddress.fromArray(
+      {
+        street: 'Hauptstraße 12',
+        postal_code: '10115',
+        city: 'Berlin',
+        country: 'DE',
+      },
+      null,
+    );
     expect(address.fullAddress).toContain('Hauptstraße 12');
     expect(address.fullAddress).toContain('Berlin');
   });

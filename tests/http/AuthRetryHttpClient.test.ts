@@ -110,8 +110,8 @@ describe('AuthRetryHttpClient', () => {
     const refreshFn = vi.fn().mockResolvedValue(REFRESH_TOKEN);
     const client = new AuthRetryHttpClient(inner, storage, refreshFn);
 
-    await expect(
-      client.request('GET', 'https://sandbox.taxora.io/v1/company', {}),
-    ).rejects.toThrow(AuthenticationException);
+    await expect(client.request('GET', 'https://sandbox.taxora.io/v1/company', {})).rejects.toThrow(
+      AuthenticationException,
+    );
   });
 });

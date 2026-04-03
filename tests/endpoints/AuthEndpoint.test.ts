@@ -18,7 +18,11 @@ const TOKEN_RESPONSE = {
   },
 };
 
-function makeEndpoint(responses: Response[]): { endpoint: AuthEndpoint; storage: InMemoryTokenStorage; client: SequenceHttpClient } {
+function makeEndpoint(responses: Response[]): {
+  endpoint: AuthEndpoint;
+  storage: InMemoryTokenStorage;
+  client: SequenceHttpClient;
+} {
   const storage = new InMemoryTokenStorage();
   const client = new SequenceHttpClient(responses);
   const endpoint = new AuthEndpoint(BASE_URL, API_KEY, storage, client);
@@ -27,9 +31,7 @@ function makeEndpoint(responses: Response[]): { endpoint: AuthEndpoint; storage:
 
 describe('AuthEndpoint.login', () => {
   it('sends login request with email identifier and stores token', async () => {
-    const { endpoint, storage, client } = makeEndpoint([
-      SequenceHttpClient.jsonResponse(TOKEN_RESPONSE),
-    ]);
+    const { endpoint, storage, client } = makeEndpoint([SequenceHttpClient.jsonResponse(TOKEN_RESPONSE)]);
 
     const token = await endpoint.login('user@example.com', 'secret123');
 
@@ -108,17 +110,13 @@ describe('AuthEndpoint.login', () => {
   });
 
   it('throws AuthenticationException on 401', async () => {
-    const { endpoint } = makeEndpoint([
-      SequenceHttpClient.jsonResponse({ message: 'Unauthorized' }, 401),
-    ]);
+    const { endpoint } = makeEndpoint([SequenceHttpClient.jsonResponse({ message: 'Unauthorized' }, 401)]);
 
     await expect(endpoint.login('bad@example.com', 'wrong')).rejects.toThrow(AuthenticationException);
   });
 
   it('throws HttpException on 500', async () => {
-    const { endpoint } = makeEndpoint([
-      SequenceHttpClient.jsonResponse({ message: 'Internal Server Error' }, 500),
-    ]);
+    const { endpoint } = makeEndpoint([SequenceHttpClient.jsonResponse({ message: 'Internal Server Error' }, 500)]);
 
     await expect(endpoint.login('user@example.com', 'secret')).rejects.toThrow(HttpException);
   });

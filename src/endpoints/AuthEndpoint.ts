@@ -3,8 +3,8 @@ import { Token } from '../dto/Token.js';
 import { LoginIdentifier } from '../enums/LoginIdentifier.js';
 import { AuthenticationException } from '../exceptions/AuthenticationException.js';
 import { HttpException } from '../exceptions/HttpException.js';
-import { HttpClientInterface } from '../http/HttpClientInterface.js';
-import { TokenStorageInterface } from '../http/TokenStorageInterface.js';
+import { type HttpClientInterface } from '../http/HttpClientInterface.js';
+import { type TokenStorageInterface } from '../http/TokenStorageInterface.js';
 
 export class AuthEndpoint {
   constructor(
@@ -45,7 +45,10 @@ export class AuthEndpoint {
     const responseText = await response.text();
 
     if (response.status === 401) {
-      throw new AuthenticationException('Authentication failed: invalid credentials', { status: 401, body: responseText });
+      throw new AuthenticationException('Authentication failed: invalid credentials', {
+        status: 401,
+        body: responseText,
+      });
     }
 
     if (!response.ok) {

@@ -11,9 +11,7 @@ export class VatCollection implements Iterable<VatResource> {
 
   static fromResponse(data: unknown): VatCollection {
     if (Array.isArray(data)) {
-      return new VatCollection(
-        (data as Record<string, unknown>[]).map(VatResource.fromArray),
-      );
+      return new VatCollection((data as Record<string, unknown>[]).map(VatResource.fromArray));
     }
 
     if (typeof data === 'object' && data !== null) {

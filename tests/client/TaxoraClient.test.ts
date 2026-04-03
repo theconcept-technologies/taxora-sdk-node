@@ -53,8 +53,8 @@ describe('TaxoraClient', () => {
   it('preemptively refreshes expired token before making request', async () => {
     const expiredToken = new Token('expired-token', 'Bearer', new Date(Date.now() - 1000));
     const { taxoraClient, storage, client } = makeClient([
-      SequenceHttpClient.jsonResponse(TOKEN_RESPONSE),      // refresh
-      SequenceHttpClient.jsonResponse(COMPANY_RESPONSE),    // company get
+      SequenceHttpClient.jsonResponse(TOKEN_RESPONSE), // refresh
+      SequenceHttpClient.jsonResponse(COMPANY_RESPONSE), // company get
     ]);
     storage.set(expiredToken);
 
@@ -70,9 +70,9 @@ describe('TaxoraClient', () => {
   it('handles 401 by refreshing and retrying once', async () => {
     const validToken = new Token('valid-token', 'Bearer', new Date(Date.now() + 3600_000));
     const { taxoraClient, storage, client } = makeClient([
-      SequenceHttpClient.jsonResponse({ message: 'Unauthorized' }, 401),  // first attempt → 401
-      SequenceHttpClient.jsonResponse(TOKEN_RESPONSE),                     // refresh
-      SequenceHttpClient.jsonResponse(COMPANY_RESPONSE),                   // retry
+      SequenceHttpClient.jsonResponse({ message: 'Unauthorized' }, 401), // first attempt → 401
+      SequenceHttpClient.jsonResponse(TOKEN_RESPONSE), // refresh
+      SequenceHttpClient.jsonResponse(COMPANY_RESPONSE), // retry
     ]);
     storage.set(validToken);
 
@@ -85,8 +85,8 @@ describe('TaxoraClient', () => {
   it('bubbles AuthenticationException when refresh fails after 401', async () => {
     const validToken = new Token('valid-token', 'Bearer', new Date(Date.now() + 3600_000));
     const { taxoraClient, storage } = makeClient([
-      SequenceHttpClient.jsonResponse({ message: 'Unauthorized' }, 401),  // first attempt → 401
-      SequenceHttpClient.jsonResponse({ message: 'Unauthorized' }, 401),  // refresh fails
+      SequenceHttpClient.jsonResponse({ message: 'Unauthorized' }, 401), // first attempt → 401
+      SequenceHttpClient.jsonResponse({ message: 'Unauthorized' }, 401), // refresh fails
     ]);
     storage.set(validToken);
 

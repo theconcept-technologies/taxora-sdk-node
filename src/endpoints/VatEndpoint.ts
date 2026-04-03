@@ -2,12 +2,12 @@ import { VatResource } from '../dto/VatResource.js';
 import { VatCollection } from '../dto/VatCollection.js';
 import { VatCertificateExport } from '../dto/VatCertificateExport.js';
 import { VatValidationAddressInput } from '../dto/VatValidationAddressInput.js';
-import { Language } from '../enums/Language.js';
+import { type Language } from '../enums/Language.js';
 import { HttpException } from '../exceptions/HttpException.js';
 import { ValidationException } from '../exceptions/ValidationException.js';
 import { TaxoraException } from '../exceptions/TaxoraException.js';
-import { HttpClientInterface } from '../http/HttpClientInterface.js';
-import { TokenStorageInterface } from '../http/TokenStorageInterface.js';
+import { type HttpClientInterface } from '../http/HttpClientInterface.js';
+import { type TokenStorageInterface } from '../http/TokenStorageInterface.js';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -30,17 +30,13 @@ export class VatEndpoint {
     if (provider) body['source'] = provider;
 
     if (addressInput) {
-      body['address_input'] =
-        addressInput instanceof VatValidationAddressInput ? addressInput.toArray() : addressInput;
+      body['address_input'] = addressInput instanceof VatValidationAddressInput ? addressInput.toArray() : addressInput;
     }
 
     return this.validateWithGatewayRetry(body, 2);
   }
 
-  private async validateWithGatewayRetry(
-    body: Record<string, unknown>,
-    attemptsLeft: number,
-  ): Promise<VatResource> {
+  private async validateWithGatewayRetry(body: Record<string, unknown>, attemptsLeft: number): Promise<VatResource> {
     const response = await this.sendRequest('POST', `${this.baseUrl}/vat/validate`, body);
 
     if (response.status === 504) {
@@ -55,11 +51,7 @@ export class VatEndpoint {
     return VatResource.fromArray(data);
   }
 
-  async validateMultiple(
-    vatUids: string[],
-    companyNames?: string[],
-    provider?: string,
-  ): Promise<VatCollection> {
+  async validateMultiple(vatUids: string[], companyNames?: string[], provider?: string): Promise<VatCollection> {
     const body: Record<string, unknown> = { vat_uids: vatUids };
     if (companyNames) body['company_names'] = companyNames;
     if (provider) body['source'] = provider;
@@ -145,7 +137,7 @@ export class VatEndpoint {
     if (countries && countries.length > 0) body['countries'] = countries;
     if (lang) body['lang'] = lang;
 
-    const response = await this.sendRequest('POST', url, body, [200, 202]);
+    const response = await this.sendRequest('POST', url, body);
     const data = await this.parseJsonResponse(response, [200, 202]);
 
     const exportObj = VatCertificateExport.fromArray(data);
@@ -175,17 +167,11 @@ export class VatEndpoint {
     return headers;
   }
 
-  private async sendRequest(
-    method: string,
-    url: string,
-    body?: Record<string, unknown>,
-    acceptedStatuses: number[] = [200],
-  ): Promise<Response> {
+  private async sendRequest(method: string, url: string, body?: Record<string, unknown>): Promise<Response> {
     const options: RequestInit = { headers: this.buildHeaders() };
     if (body) options.body = JSON.stringify(body);
 
-    const response = await this.httpClient.request(method, url, options);
-    return response;
+    return this.httpClient.request(method, url, options);
   }
 
   private async sendBinaryRequest(method: string, url: string): Promise<Response> {
@@ -251,9 +237,7 @@ export class VatEndpoint {
     }
 
     if (!DATE_REGEX.test(date)) {
-      throw new TaxoraException(
-        `Invalid date format: "${date}". Expected YYYY-MM-DD.`,
-      );
+      throw new TaxoraException(`Invalid date format: "${date}". Expected YYYY-MM-DD.`);
     }
 
     return date;

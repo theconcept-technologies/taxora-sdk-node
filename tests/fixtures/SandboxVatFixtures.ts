@@ -38,13 +38,7 @@ export class SandboxVatFixtures {
   }
 
   static invalid(): string[] {
-    return [
-      'ATU99999999',
-      'DE000000000',
-      'FR00000000000',
-      'IT00000000000',
-      'GB000000000',
-    ];
+    return ['ATU99999999', 'DE000000000', 'FR00000000000', 'IT00000000000', 'GB000000000'];
   }
 
   static byState(): Record<string, SandboxVatFixture[] | string[]> {

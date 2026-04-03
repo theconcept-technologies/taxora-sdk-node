@@ -144,9 +144,7 @@ describe('VatEndpoint.validateMultiple', () => {
 
 describe('VatEndpoint.validateSchema', () => {
   it('returns raw array for schema validation', async () => {
-    const { endpoint } = makeEndpoint([
-      SequenceHttpClient.jsonResponse({ success: true, data: { valid: true } }),
-    ]);
+    const { endpoint } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true, data: { valid: true } })]);
 
     const result = await endpoint.validateSchema('ATU12345678');
     expect(result).toEqual({ valid: true });
@@ -166,9 +164,7 @@ describe('VatEndpoint.state', () => {
 
 describe('VatEndpoint.history', () => {
   it('GET /vat/history returns VatCollection', async () => {
-    const { endpoint, client } = makeEndpoint([
-      SequenceHttpClient.jsonResponse({ success: true, data: [] }),
-    ]);
+    const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true, data: [] })]);
 
     const result = await endpoint.history();
     expect(result).toBeInstanceOf(VatCollection);
@@ -176,9 +172,7 @@ describe('VatEndpoint.history', () => {
   });
 
   it('GET /vat/history with vatUid filter', async () => {
-    const { endpoint, client } = makeEndpoint([
-      SequenceHttpClient.jsonResponse({ success: true, data: [] }),
-    ]);
+    const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true, data: [] })]);
 
     await endpoint.history('ATU12345678');
     expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/history?vat_uid=ATU12345678`);
@@ -187,9 +181,7 @@ describe('VatEndpoint.history', () => {
 
 describe('VatEndpoint.search', () => {
   it('GET /vat/search returns VatCollection', async () => {
-    const { endpoint, client } = makeEndpoint([
-      SequenceHttpClient.jsonResponse({ success: true, data: [] }),
-    ]);
+    const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true, data: [] })]);
 
     const result = await endpoint.search('Alpha');
     expect(result).toBeInstanceOf(VatCollection);
@@ -198,9 +190,7 @@ describe('VatEndpoint.search', () => {
   });
 
   it('includes perPage parameter', async () => {
-    const { endpoint, client } = makeEndpoint([
-      SequenceHttpClient.jsonResponse({ success: true, data: [] }),
-    ]);
+    const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true, data: [] })]);
 
     await endpoint.search('Alpha', 25);
     expect(client.requests[0]?.url).toContain('per_page=25');
@@ -218,9 +208,7 @@ describe('VatEndpoint.certificate', () => {
   });
 
   it('includes lang parameter when provided', async () => {
-    const { endpoint, client } = makeEndpoint([
-      SequenceHttpClient.binaryResponse(new Uint8Array()),
-    ]);
+    const { endpoint, client } = makeEndpoint([SequenceHttpClient.binaryResponse(new Uint8Array())]);
 
     await endpoint.certificate('uuid-123', Language.GERMAN);
     expect(client.requests[0]?.url).toContain('lang=de');
@@ -233,10 +221,7 @@ describe('VatEndpoint.certificatesBulkExport', () => {
       SequenceHttpClient.jsonResponse({ success: true, data: { export_id: 'exp-1' } }, 202),
     ]);
 
-    const result = await endpoint.certificatesBulkExport(
-      new Date('2024-01-01'),
-      new Date('2024-12-31'),
-    );
+    const result = await endpoint.certificatesBulkExport(new Date('2024-01-01'), new Date('2024-12-31'));
 
     expect(result).toBeInstanceOf(VatCertificateExport);
     expect(result.exportId).toBe('exp-1');
@@ -261,15 +246,11 @@ describe('VatEndpoint.certificatesBulkExport', () => {
   it('throws on invalid date string format', async () => {
     const { endpoint } = makeEndpoint([]);
 
-    await expect(
-      endpoint.certificatesBulkExport('01/01/2024', '2024-12-31'),
-    ).rejects.toThrow();
+    await expect(endpoint.certificatesBulkExport('01/01/2024', '2024-12-31')).rejects.toThrow();
   });
 
   it('throws when export_id is missing from response', async () => {
-    const { endpoint } = makeEndpoint([
-      SequenceHttpClient.jsonResponse({ success: true, data: {} }, 202),
-    ]);
+    const { endpoint } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true, data: {} }, 202)]);
 
     await expect(endpoint.certificatesBulkExport('2024-01-01', '2024-12-31')).rejects.toThrow();
   });
@@ -306,8 +287,6 @@ describe('VatEndpoint.downloadBulkExport', () => {
 
     const result = await endpoint.downloadBulkExport('exp-123');
     expect(result).toBeInstanceOf(Uint8Array);
-    expect(client.requests[0]?.url).toBe(
-      `${BASE_URL}/vat/certificates/bulk-export/exp-123/download`,
-    );
+    expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/certificates/bulk-export/exp-123/download`);
   });
 });

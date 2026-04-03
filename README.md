@@ -20,13 +20,13 @@
 
 The **Taxora SDK** provides a clean, type-safe interface to the [Taxora API](https://taxora.io), supporting:
 
-* ✅ Secure **API-Key** and **Bearer Token** authentication with auto-refresh
-* ✅ Single & multiple VAT validation with AI-based company name matching
-* ✅ VAT state history and full-text search endpoints
-* ✅ Certificate generation (PDF) and bulk/list exports (ZIP or PDF)
-* ✅ Strict TypeScript — full type coverage, zero `any`
-* ✅ Native `fetch` (Node 18+) — **zero runtime dependencies**
-* ✅ Dual **ESM + CJS** output for maximum compatibility
+- ✅ Secure **API-Key** and **Bearer Token** authentication with auto-refresh
+- ✅ Single & multiple VAT validation with AI-based company name matching
+- ✅ VAT state history and full-text search endpoints
+- ✅ Certificate generation (PDF) and bulk/list exports (ZIP or PDF)
+- ✅ Strict TypeScript — full type coverage, zero `any`
+- ✅ Native `fetch` (Node 18+) — **zero runtime dependencies**
+- ✅ Dual **ESM + CJS** output for maximum compatibility
 
 > 🔒 The SDK itself is free to use, but a **Taxora API subscription** is required.
 > Obtain your `x-api-key` from your [Taxora account developer settings](https://app.taxora.io).
@@ -58,9 +58,9 @@ await client.auth.login('user@example.com', 'superSecret');
 
 // 2️⃣ Validate a VAT number
 const vat = await client.vat.validate('ATU12345678', 'Example GmbH');
-console.log(vat.state);        // 'valid' | 'invalid' | 'fraud' | 'unknown'
-console.log(vat.companyName);  // Official company name from registry
-console.log(vat.score);        // Overall confidence score (0.0 – 1.0)
+console.log(vat.state); // 'valid' | 'invalid' | 'fraud' | 'unknown'
+console.log(vat.companyName); // Official company name from registry
+console.log(vat.score); // Overall confidence score (0.0 – 1.0)
 
 for (const step of vat.breakdown ?? []) {
   console.log(`${step.stepName} → ${step.scoreContribution}`);
@@ -123,9 +123,9 @@ TaxoraClientFactory.create()
 
 Each endpoint handles:
 
-* Request signing with `x-api-key`
-* Bearer token injection and proactive refresh if expired
-* JSON/binary response parsing into typed DTOs
+- Request signing with `x-api-key`
+- Bearer token injection and proactive refresh if expired
+- JSON/binary response parsing into typed DTOs
 
 `VatEndpoint` and `CompanyEndpoint` use the `AuthRetryHttpClient` wrapper, which transparently handles preemptive token refresh and 401 retry — `AuthEndpoint` always uses the raw HTTP client to avoid circular refresh calls.
 
@@ -133,16 +133,16 @@ Each endpoint handles:
 
 ## 📦 DTOs
 
-| Class                       | Description                                                                                          |
-| --------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `VatResource`               | Single VAT validation result: state, score, breakdown, company name, address, provider document      |
-| `VatCollection`             | Iterable collection of `VatResource` objects with optional pagination `self` link                    |
-| `ScoreBreakdown`            | Per-step scoring fragment: step name, score contribution, and metadata context                       |
-| `CompanyAddress`            | Structured company address; assembles `fullAddress` from components or parses JSON strings           |
-| `VatValidationAddressInput` | Typed input for address-based fallback scoring (validates lengths, country code format)               |
-| `Token`                     | Access token with type and expiry; 15-second buffer for proactive refresh                            |
-| `VatCertificateExport`      | Bulk export job reference (`exportId` + optional message)                                            |
-| `ProviderDocument`          | Attached provider document metadata (type, date, MIME, hash, nested line item)                      |
+| Class                       | Description                                                                                     |
+| --------------------------- | ----------------------------------------------------------------------------------------------- |
+| `VatResource`               | Single VAT validation result: state, score, breakdown, company name, address, provider document |
+| `VatCollection`             | Iterable collection of `VatResource` objects with optional pagination `self` link               |
+| `ScoreBreakdown`            | Per-step scoring fragment: step name, score contribution, and metadata context                  |
+| `CompanyAddress`            | Structured company address; assembles `fullAddress` from components or parses JSON strings      |
+| `VatValidationAddressInput` | Typed input for address-based fallback scoring (validates lengths, country code format)         |
+| `Token`                     | Access token with type and expiry; 15-second buffer for proactive refresh                       |
+| `VatCertificateExport`      | Bulk export job reference (`exportId` + optional message)                                       |
+| `ProviderDocument`          | Attached provider document metadata (type, date, MIME, hash, nested line item)                  |
 
 All DTOs expose `toArray()` for serialization and a static `fromArray()` factory.
 
@@ -176,10 +176,10 @@ await client.auth.login('client_abc123', 'client-secret', undefined, LoginIdenti
 
 The SDK automatically refreshes the token in two scenarios:
 
-| Trigger | Behaviour |
-|---|---|
-| **Preemptive** (token expired + 15 s buffer) | Refreshes before the next request |
-| **Reactive** (API returns `401`) | Refreshes once and retries the original request |
+| Trigger                                      | Behaviour                                       |
+| -------------------------------------------- | ----------------------------------------------- |
+| **Preemptive** (token expired + 15 s buffer) | Refreshes before the next request               |
+| **Reactive** (API returns `401`)             | Refreshes once and retries the original request |
 
 You never need to call `refresh()` manually in normal usage.
 
@@ -197,9 +197,15 @@ By default, tokens are stored in-memory and lost on process restart. Provide you
 import { TokenStorageInterface, Token } from '@taxora/sdk';
 
 class RedisTokenStorage implements TokenStorageInterface {
-  get(): Token | null      { /* read from Redis */ return null; }
-  set(token: Token): void  { /* write with TTL = token.expiresAt */ }
-  clear(): void            { /* delete key */ }
+  get(): Token | null {
+    /* read from Redis */ return null;
+  }
+  set(token: Token): void {
+    /* write with TTL = token.expiresAt */
+  }
+  clear(): void {
+    /* delete key */
+  }
 }
 
 const client = TaxoraClientFactory.create({
@@ -229,10 +235,10 @@ const vat = await client.vat.validate('ATU12345678', 'Alpha Handels GmbH', 'vies
   country_code: 'AT',
 });
 
-console.log(vat.state);                    // VatState value
-console.log(vat.score);                    // 0.0 – 1.0
+console.log(vat.state); // VatState value
+console.log(vat.score); // 0.0 – 1.0
 console.log(vat.companyAddress?.toString()); // Full address string
-console.log(vat.getBackendLink());         // https://app.taxora.io/vat/history/{uuid}
+console.log(vat.getBackendLink()); // https://app.taxora.io/vat/history/{uuid}
 ```
 
 ### Schema Validation (format check only)
@@ -264,7 +270,7 @@ const vat = await client.vat.state('ATU12345678');
 ### History
 
 ```ts
-const history = await client.vat.history();          // all entries
+const history = await client.vat.history(); // all entries
 const history = await client.vat.history('ATU12345678'); // filtered
 
 for (const entry of history) {
@@ -296,10 +302,10 @@ writeFileSync('certificate.pdf', pdf);
 
 ```ts
 const exportJob = await client.vat.certificatesBulkExport(
-  '2024-01-01',          // or new Date('2024-01-01')
+  '2024-01-01', // or new Date('2024-01-01')
   '2024-12-31',
-  ['AT', 'DE'],          // optional: filter by country
-  Language.ENGLISH,      // optional: language
+  ['AT', 'DE'], // optional: filter by country
+  Language.ENGLISH, // optional: language
 );
 
 console.log(exportJob.exportId); // poll or use directly
@@ -311,20 +317,17 @@ writeFileSync('certificates.zip', zip);
 ### List Export
 
 ```ts
-const exportJob = await client.vat.certificatesListExport(
-  new Date('2024-01-01'),
-  new Date('2024-12-31'),
-);
+const exportJob = await client.vat.certificatesListExport(new Date('2024-01-01'), new Date('2024-12-31'));
 ```
 
 ---
 
 ## 🌍 Environments
 
-| Environment            | Base URL                        |
-| ---------------------- | ------------------------------- |
-| `Environment.SANDBOX`  | `https://sandbox.taxora.io/v1`  |
-| `Environment.PRODUCTION` | `https://api.taxora.io/v1`    |
+| Environment              | Base URL                       |
+| ------------------------ | ------------------------------ |
+| `Environment.SANDBOX`    | `https://sandbox.taxora.io/v1` |
+| `Environment.PRODUCTION` | `https://api.taxora.io/v1`     |
 
 ```ts
 const client = TaxoraClientFactory.create({
@@ -365,13 +368,13 @@ try {
 ```ts
 import { VatState, getFailedVatStates, describeVatState } from '@taxora/sdk';
 
-VatState.VALID    // 'valid'
-VatState.INVALID  // 'invalid'
-VatState.FRAUD    // 'fraud'
-VatState.UNKNOWN  // 'unknown'
+VatState.VALID; // 'valid'
+VatState.INVALID; // 'invalid'
+VatState.FRAUD; // 'fraud'
+VatState.UNKNOWN; // 'unknown'
 
-getFailedVatStates()              // ['invalid', 'fraud']
-describeVatState(VatState.VALID)  // 'The VAT number is valid and active.'
+getFailedVatStates(); // ['invalid', 'fraud']
+describeVatState(VatState.VALID); // 'The VAT number is valid and active.'
 ```
 
 ---
@@ -386,9 +389,9 @@ npm run test:watch      # Watch mode during development
 
 CI runs on **Node 18**, **20**, and **22**, verifying:
 
-* 129 Vitest unit tests across 18 test files
-* 97.8 % statement coverage / 87 % branch coverage / 100 % function coverage
-* Strict TypeScript compilation
+- 129 Vitest unit tests across 18 test files
+- 97.8 % statement coverage / 87 % branch coverage / 100 % function coverage
+- Strict TypeScript compilation
 
 ---
 
@@ -420,9 +423,9 @@ The SDK is open-source, but API usage requires a valid **Taxora subscription**.
 
 Contributions and pull requests are welcome!
 
-* Follow the existing TypeScript code style (strict mode, no `any`).
-* Run `npm test` before submitting a PR.
-* Ensure new endpoints include DTOs + tests.
+- Follow the existing TypeScript code style (strict mode, no `any`).
+- Run `npm test` before submitting a PR.
+- Ensure new endpoints include DTOs + tests.
 
 ---
 

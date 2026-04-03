@@ -1,7 +1,7 @@
-import { Token } from '../dto/Token.js';
+import { type Token } from '../dto/Token.js';
 import { AuthenticationException } from '../exceptions/AuthenticationException.js';
-import { HttpClientInterface } from './HttpClientInterface.js';
-import { TokenStorageInterface } from './TokenStorageInterface.js';
+import { type HttpClientInterface } from './HttpClientInterface.js';
+import { type TokenStorageInterface } from './TokenStorageInterface.js';
 
 const AUTH_PATH_PATTERN = /\/auth\//;
 
