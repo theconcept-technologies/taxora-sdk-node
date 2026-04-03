@@ -1,6 +1,6 @@
 {
   "name": "@taxora/sdk",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Taxora VAT Validation API SDK for Node.js",
   "license": "MIT",
   "type": "module",
@@ -15,8 +15,14 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
@@ -26,7 +32,8 @@
     "lint:fix": "eslint src tests --ext .ts --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",
@@ -39,6 +46,25 @@
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",
     "vitest": "^3.2.4"
+  },
+  "keywords": [
+    "taxora",
+    "vat",
+    "validation",
+    "vat-validation",
+    "eu-vat",
+    "tax",
+    "sdk",
+    "typescript",
+    "node"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/theconcept-technologies/taxora-sdk-node.git"
+  },
+  "homepage": "https://taxora.io",
+  "bugs": {
+    "url": "https://github.com/theconcept-technologies/taxora-sdk-node/issues"
   },
   "engines": {
     "node": ">=18.0.0"
