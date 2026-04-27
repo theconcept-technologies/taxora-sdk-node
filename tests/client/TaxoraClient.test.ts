@@ -18,7 +18,10 @@ const TOKEN_RESPONSE = {
   },
 };
 
-const COMPANY_RESPONSE = { success: true, data: { id: 1, name: 'Test Company' } };
+const COMPANY_RESPONSE = {
+  success: true,
+  data: { id: 1, name: 'Test Company', api_rate_limit: 120, vat_rate_limit: 80 },
+};
 
 function makeClient(responses: Response[], environment = Environment.SANDBOX) {
   const storage = new InMemoryTokenStorage();
@@ -77,9 +80,29 @@ describe('TaxoraClient', () => {
     storage.set(validToken);
 
     const result = await taxoraClient.company.get();
-    expect(result).toEqual({ id: 1, name: 'Test Company' });
+    expect(result).toEqual({ id: 1, name: 'Test Company', api_rate_limit: 120, vat_rate_limit: 80 });
     expect(client.requests).toHaveLength(3);
     expect(client.requests[1]?.url).toContain('/auth/refresh');
+  });
+
+  it('normalizes legacy company rate_limit through the public client', async () => {
+    const validToken = new Token('valid-token', 'Bearer', new Date(Date.now() + 3600_000));
+    const { taxoraClient, storage } = makeClient([
+      SequenceHttpClient.jsonResponse({
+        success: true,
+        data: { id: 2, name: 'Legacy Company', rate_limit: 100 },
+      }),
+    ]);
+    storage.set(validToken);
+
+    const result = await taxoraClient.company.get();
+    expect(result).toEqual({
+      id: 2,
+      name: 'Legacy Company',
+      rate_limit: 100,
+      api_rate_limit: 100,
+      vat_rate_limit: 100,
+    });
   });
 
   it('bubbles AuthenticationException when refresh fails after 401', async () => {

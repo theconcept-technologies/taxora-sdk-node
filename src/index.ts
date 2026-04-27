@@ -12,6 +12,7 @@ export { VatEndpoint } from './endpoints/VatEndpoint.js';
 export { Token } from './dto/Token.js';
 export { ScoreBreakdown } from './dto/ScoreBreakdown.js';
 export { CompanyAddress } from './dto/CompanyAddress.js';
+export type { CompanyResource } from './dto/CompanyResource.js';
 export { VatValidationAddressInput } from './dto/VatValidationAddressInput.js';
 export { ProviderDocumentLine } from './dto/ProviderDocumentLine.js';
 export { ProviderDocument } from './dto/ProviderDocument.js';

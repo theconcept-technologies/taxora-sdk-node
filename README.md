@@ -61,6 +61,9 @@ const vat = await client.vat.validate('ATU12345678', 'Example GmbH');
 console.log(vat.state); // 'valid' | 'invalid' | 'fraud' | 'unknown'
 console.log(vat.companyName); // Official company name from registry
 console.log(vat.score); // Overall confidence score (0.0 – 1.0)
+console.log(vat.hasApiError); // true when the official provider had a technical failure
+console.log(vat.errorMessage); // technical provider error details, if returned
+console.log(vat.nextApiRecheckAt); // planned retry timestamp, if returned
 
 for (const step of vat.breakdown ?? []) {
   console.log(`${step.stepName} → ${step.scoreContribution}`);
@@ -79,6 +82,9 @@ const vatWithAddress = await client.vat.validate('ATU12345678', 'Example GmbH', 
 
 // 3️⃣ Access company context
 const company = await client.company.get();
+console.log(company.api_rate_limit); // General API request limit
+console.log(company.vat_rate_limit); // VAT validation request limit
+console.log(company.rate_limit); // Deprecated legacy field, if returned by older API payloads
 
 // 4️⃣ Export certificates
 const exportJob = await client.vat.certificatesBulkExport('2024-01-01', '2024-12-31');
@@ -87,7 +93,7 @@ import { writeFileSync } from 'fs';
 writeFileSync('certificates.zip', zip);
 ```
 
-`vat.validate()` returns a `VatResource` with the canonical VAT UID, status, company data, and optional scoring details. The `score` reflects overall confidence (higher is better), while `breakdown` is an array of `ScoreBreakdown` objects describing each validation step, its score contribution, and metadata (e.g. matched addresses or mismatched fields).
+`vat.validate()` returns a `VatResource` with the canonical VAT UID, status, company data, optional scoring details, and optional API error metadata. `state` remains backward-compatible and still reflects the canonical business result, while `hasApiError`, `errorMessage`, and `nextApiRecheckAt` let you detect cases where the official provider response was technically unreliable. The `score` reflects overall confidence (higher is better), while `breakdown` is an array of `ScoreBreakdown` objects describing each validation step, its score contribution, and metadata (e.g. matched addresses or mismatched fields).
 
 Need a custom HTTP client (e.g. for logging or retries)? Pass it via the factory:
 
@@ -126,6 +132,8 @@ Each endpoint handles:
 - Request signing with `x-api-key`
 - Bearer token injection and proactive refresh if expired
 - JSON/binary response parsing into typed DTOs
+
+`client.company.get()` returns a typed company resource. Prefer `api_rate_limit` and `vat_rate_limit`; legacy `rate_limit` remains available only for older compatibility payloads and is deprecated.
 
 `VatEndpoint` and `CompanyEndpoint` use the `AuthRetryHttpClient` wrapper, which transparently handles preemptive token refresh and 401 retry — `AuthEndpoint` always uses the raw HTTP client to avoid circular refresh calls.
 
@@ -239,6 +247,13 @@ console.log(vat.state); // VatState value
 console.log(vat.score); // 0.0 – 1.0
 console.log(vat.companyAddress?.toString()); // Full address string
 console.log(vat.getBackendLink()); // https://app.taxora.io/vat/history/{uuid}
+
+// Technical provider errors are additive and do not replace the canonical state.
+const retryCase = await client.vat.validate('ATU44000001', 'Example GmbH');
+if (retryCase.state === 'invalid' && retryCase.hasApiError) {
+  console.log(retryCase.errorMessage);
+  console.log(retryCase.nextApiRecheckAt);
+}
 ```
 
 ### Schema Validation (format check only)

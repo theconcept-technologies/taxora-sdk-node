@@ -22,6 +22,9 @@ const VAT_RESPONSE = {
     state: 'valid',
     company_name: 'Alpha Handels GmbH',
     environment: 'SANDBOX',
+    has_api_error: true,
+    error_message: 'Official registry temporarily unavailable',
+    next_api_recheck_at: '2026-04-24T14:00:00Z',
   },
 };
 
@@ -42,6 +45,9 @@ describe('VatEndpoint.validate', () => {
 
     expect(result).toBeInstanceOf(VatResource);
     expect(result.vatUid).toBe('ATU12345678');
+    expect(result.hasApiError).toBe(true);
+    expect(result.errorMessage).toBe('Official registry temporarily unavailable');
+    expect(result.nextApiRecheckAt).toBe('2026-04-24T14:00:00Z');
 
     const req = client.requests[0]!;
     expect(req.method).toBe('POST');

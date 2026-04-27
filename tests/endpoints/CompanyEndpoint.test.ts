@@ -19,7 +19,13 @@ function makeEndpoint(responses: Response[]) {
 
 describe('CompanyEndpoint.get', () => {
   it('returns company payload with correct headers', async () => {
-    const companyData = { id: 1, name: 'Test Company', vat_id: 'ATU12345678' };
+    const companyData = {
+      id: 1,
+      name: 'Test Company',
+      vat_uid: 'ATU12345678',
+      api_rate_limit: 120,
+      vat_rate_limit: 80,
+    };
     const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true, data: companyData })]);
 
     const result = await endpoint.get();
@@ -36,11 +42,31 @@ describe('CompanyEndpoint.get', () => {
   });
 
   it('returns raw payload when no data wrapper', async () => {
-    const companyData = { id: 2, name: 'Another Company' };
+    const companyData = {
+      id: 2,
+      name: 'Another Company',
+      api_rate_limit: 50,
+      vat_rate_limit: 25,
+    };
     const { endpoint } = makeEndpoint([SequenceHttpClient.jsonResponse(companyData)]);
 
     const result = await endpoint.get();
     expect(result).toEqual(companyData);
+  });
+
+  it('normalizes legacy rate_limit into both new fields', async () => {
+    const companyData = { id: 3, name: 'Legacy Company', rate_limit: 100 };
+    const { endpoint } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true, data: companyData })]);
+
+    const result = await endpoint.get();
+
+    expect(result).toEqual({
+      id: 3,
+      name: 'Legacy Company',
+      rate_limit: 100,
+      api_rate_limit: 100,
+      vat_rate_limit: 100,
+    });
   });
 
   it('throws HttpException on 500', async () => {

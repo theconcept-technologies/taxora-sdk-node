@@ -25,6 +25,9 @@ export class VatResource {
     public readonly providerVatState: string | undefined,
     public readonly providerNote: string | undefined,
     public readonly providerLastCheckedAt: Date | undefined,
+    public readonly hasApiError: boolean | null | undefined,
+    public readonly errorMessage: string | null | undefined,
+    public readonly nextApiRecheckAt: string | null | undefined,
     public readonly providerDocument: ProviderDocument | undefined,
   ) {}
 
@@ -44,6 +47,24 @@ export class VatResource {
     const providerLastCheckedAt = str('provider_last_checked_at')
       ? new Date(data['provider_last_checked_at'] as string)
       : undefined;
+    const hasApiError =
+      data['has_api_error'] === null
+        ? null
+        : typeof data['has_api_error'] === 'boolean'
+          ? data['has_api_error']
+          : undefined;
+    const errorMessage =
+      data['error_message'] === null
+        ? null
+        : typeof data['error_message'] === 'string'
+          ? data['error_message']
+          : undefined;
+    const nextApiRecheckAt =
+      data['next_api_recheck_at'] === null
+        ? null
+        : typeof data['next_api_recheck_at'] === 'string'
+          ? data['next_api_recheck_at']
+          : undefined;
 
     const breakdown = Array.isArray(data['breakdown'])
       ? (data['breakdown'] as Record<string, unknown>[]).map(ScoreBreakdown.fromArray)
@@ -85,6 +106,9 @@ export class VatResource {
       str('provider_vat_state'),
       str('provider_note'),
       providerLastCheckedAt,
+      hasApiError,
+      errorMessage,
+      nextApiRecheckAt,
       ProviderDocument.fromArray(data['provider_document']) ?? undefined,
     );
   }
@@ -119,6 +143,9 @@ export class VatResource {
       provider_vat_state: this.providerVatState ?? null,
       provider_note: this.providerNote ?? null,
       provider_last_checked_at: this.providerLastCheckedAt?.toISOString() ?? null,
+      has_api_error: this.hasApiError ?? null,
+      error_message: this.errorMessage ?? null,
+      next_api_recheck_at: this.nextApiRecheckAt ?? null,
       provider_document: this.providerDocument?.toArray() ?? null,
     };
   }

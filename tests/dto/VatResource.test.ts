@@ -27,6 +27,9 @@ const FULL_RESPONSE = {
   provider_vat_state: 'valid',
   provider_note: 'Registered',
   provider_last_checked_at: '2024-05-30T08:00:00.000Z',
+  has_api_error: true,
+  error_message: 'VIES service unavailable.',
+  next_api_recheck_at: '2026-04-24T14:00:00Z',
   provider_document: { id: 1, provider: 'vies', document_type: 'VAT_REGISTER' },
 };
 
@@ -51,6 +54,9 @@ describe('VatResource', () => {
     expect(vat.usedProviders).toEqual(['vies', 'manual']);
     expect(vat.providerDocument).toBeInstanceOf(ProviderDocument);
     expect(vat.providerLastCheckedAt).toBeInstanceOf(Date);
+    expect(vat.hasApiError).toBe(true);
+    expect(vat.errorMessage).toBe('VIES service unavailable.');
+    expect(vat.nextApiRecheckAt).toBe('2026-04-24T14:00:00Z');
   });
 
   it('fromArray handles missing optional fields gracefully', () => {
@@ -59,6 +65,22 @@ describe('VatResource', () => {
     expect(vat.uuid).toBeUndefined();
     expect(vat.state).toBeUndefined();
     expect(vat.breakdown).toBeUndefined();
+    expect(vat.hasApiError).toBeUndefined();
+    expect(vat.errorMessage).toBeUndefined();
+    expect(vat.nextApiRecheckAt).toBeUndefined();
+  });
+
+  it('preserves null API error metadata when present as null', () => {
+    const vat = VatResource.fromArray({
+      vat_uid: 'DE123456789',
+      has_api_error: null,
+      error_message: null,
+      next_api_recheck_at: null,
+    });
+
+    expect(vat.hasApiError).toBeNull();
+    expect(vat.errorMessage).toBeNull();
+    expect(vat.nextApiRecheckAt).toBeNull();
   });
 
   it('getBackendLink returns LIVE URL', () => {
@@ -85,6 +107,9 @@ describe('VatResource', () => {
     expect(typeof arr['checked_at']).toBe('string');
     expect(Array.isArray(arr['breakdown'])).toBe(true);
     expect(arr['provider_document']).toBeDefined();
+    expect(arr['has_api_error']).toBe(true);
+    expect(arr['error_message']).toBe('VIES service unavailable.');
+    expect(arr['next_api_recheck_at']).toBe('2026-04-24T14:00:00Z');
   });
 
   it('toArray includes address fallback response fields', () => {
