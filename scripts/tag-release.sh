@@ -82,7 +82,7 @@ bump_package_json() {
   local pkg="package.json"
   [[ -f "$pkg" ]] || die "package.json not found."
 
-  info "Bumping package.json version to $version…"
+  info "Bumping package.json version to ${version}..."
   # Use node to update version in-place (avoids sed portability issues)
   node -e "
     const fs = require('fs');
