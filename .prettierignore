@@ -2,3 +2,5 @@ dist/
 node_modules/
 coverage/
 package-lock.json
+resources/openapi-production.json
+resources/openapi-sandbox.json
