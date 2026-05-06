@@ -20,6 +20,7 @@ const VAT_RESPONSE = {
     uuid: 'uuid-123',
     vat_uid: 'ATU12345678',
     state: 'valid',
+    provider_valid: true,
     company_name: 'Alpha Handels GmbH',
     environment: 'SANDBOX',
     has_api_error: true,
@@ -45,6 +46,7 @@ describe('VatEndpoint.validate', () => {
 
     expect(result).toBeInstanceOf(VatResource);
     expect(result.vatUid).toBe('ATU12345678');
+    expect(result.providerValid).toBe(true);
     expect(result.hasApiError).toBe(true);
     expect(result.errorMessage).toBe('Official registry temporarily unavailable');
     expect(result.nextApiRecheckAt).toBe('2026-04-24T14:00:00Z');

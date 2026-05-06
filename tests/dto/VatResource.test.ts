@@ -24,6 +24,7 @@ const FULL_RESPONSE = {
   environment: 'LIVE',
   provider: 'vies',
   used_providers: ['vies', 'manual'],
+  provider_valid: true,
   provider_vat_state: 'valid',
   provider_note: 'Registered',
   provider_last_checked_at: '2024-05-30T08:00:00.000Z',
@@ -52,6 +53,7 @@ describe('VatResource', () => {
     expect(vat.environment).toBe('LIVE');
     expect(vat.provider).toBe('vies');
     expect(vat.usedProviders).toEqual(['vies', 'manual']);
+    expect(vat.providerValid).toBe(true);
     expect(vat.providerDocument).toBeInstanceOf(ProviderDocument);
     expect(vat.providerLastCheckedAt).toBeInstanceOf(Date);
     expect(vat.hasApiError).toBe(true);
@@ -65,9 +67,28 @@ describe('VatResource', () => {
     expect(vat.uuid).toBeUndefined();
     expect(vat.state).toBeUndefined();
     expect(vat.breakdown).toBeUndefined();
+    expect(vat.providerValid).toBeUndefined();
     expect(vat.hasApiError).toBeUndefined();
     expect(vat.errorMessage).toBeUndefined();
     expect(vat.nextApiRecheckAt).toBeUndefined();
+  });
+
+  it('preserves provider_valid when present as false', () => {
+    const vat = VatResource.fromArray({
+      vat_uid: 'DE123456789',
+      provider_valid: false,
+    });
+
+    expect(vat.providerValid).toBe(false);
+  });
+
+  it('preserves provider_valid when present as null', () => {
+    const vat = VatResource.fromArray({
+      vat_uid: 'DE123456789',
+      provider_valid: null,
+    });
+
+    expect(vat.providerValid).toBeNull();
   });
 
   it('preserves null API error metadata when present as null', () => {
@@ -107,9 +128,19 @@ describe('VatResource', () => {
     expect(typeof arr['checked_at']).toBe('string');
     expect(Array.isArray(arr['breakdown'])).toBe(true);
     expect(arr['provider_document']).toBeDefined();
+    expect(arr['provider_valid']).toBe(true);
     expect(arr['has_api_error']).toBe(true);
     expect(arr['error_message']).toBe('VIES service unavailable.');
     expect(arr['next_api_recheck_at']).toBe('2026-04-24T14:00:00Z');
+  });
+
+  it('toArray preserves null provider_valid', () => {
+    const vat = VatResource.fromArray({
+      vat_uid: 'DE123456789',
+      provider_valid: null,
+    });
+
+    expect(vat.toArray()['provider_valid']).toBeNull();
   });
 
   it('toArray includes address fallback response fields', () => {
@@ -119,6 +150,61 @@ describe('VatResource', () => {
     });
     const arr = vat.toArray();
     expect(arr['requested_input_address']).toEqual({ address_line_1: 'Ringstraße 1' });
+  });
+
+  it('isValid uses VatResource state by default', () => {
+    const validVat = VatResource.fromArray({ state: VatState.VALID, provider_valid: false });
+    const invalidVat = VatResource.fromArray({ state: VatState.INVALID, provider_valid: true });
+
+    expect(validVat.isValid()).toBe(true);
+    expect(invalidVat.isValid()).toBe(false);
+  });
+
+  it('isValid(true) prefers provider_valid when available', () => {
+    const vat = VatResource.fromArray({
+      state: VatState.INVALID,
+      provider_valid: true,
+      provider_vat_state: VatState.INVALID,
+    });
+
+    expect(vat.isValid(true)).toBe(true);
+  });
+
+  it('isValid(true) falls back to provider_vat_state when provider_valid is null', () => {
+    const vat = VatResource.fromArray({
+      state: VatState.INVALID,
+      provider_valid: null,
+      provider_vat_state: VatState.VALID,
+    });
+
+    expect(vat.isValid(true)).toBe(true);
+  });
+
+  it('isValid(true) falls back to provider_vat_state when provider_valid is missing', () => {
+    const vat = VatResource.fromArray({
+      state: VatState.INVALID,
+      provider_vat_state: VatState.INVALID,
+    });
+
+    expect(vat.isValid(true)).toBe(false);
+  });
+
+  it('isProviderValid returns a boolean using provider_valid first and provider_vat_state as fallback', () => {
+    const providerValidVat = VatResource.fromArray({
+      provider_valid: false,
+      provider_vat_state: VatState.VALID,
+    });
+    const fallbackVat = VatResource.fromArray({
+      provider_valid: null,
+      provider_vat_state: VatState.VALID,
+    });
+    const missingFallbackVat = VatResource.fromArray({
+      provider_vat_state: VatState.INVALID,
+    });
+
+    expect(providerValidVat.isProviderValid()).toBe(false);
+    expect(fallbackVat.isProviderValid()).toBe(true);
+    expect(missingFallbackVat.isProviderValid()).toBe(false);
   });
 });
 

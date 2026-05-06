@@ -22,6 +22,7 @@ export class VatResource {
     public readonly environment: string | undefined,
     public readonly provider: string | undefined,
     public readonly usedProviders: string[] | undefined,
+    public readonly providerValid: boolean | null | undefined,
     public readonly providerVatState: string | undefined,
     public readonly providerNote: string | undefined,
     public readonly providerLastCheckedAt: Date | undefined,
@@ -65,6 +66,12 @@ export class VatResource {
         : typeof data['next_api_recheck_at'] === 'string'
           ? data['next_api_recheck_at']
           : undefined;
+    const providerValid =
+      data['provider_valid'] === null
+        ? null
+        : typeof data['provider_valid'] === 'boolean'
+          ? data['provider_valid']
+          : undefined;
 
     const breakdown = Array.isArray(data['breakdown'])
       ? (data['breakdown'] as Record<string, unknown>[]).map(ScoreBreakdown.fromArray)
@@ -103,6 +110,7 @@ export class VatResource {
       str('environment'),
       str('provider'),
       usedProviders,
+      providerValid,
       str('provider_vat_state'),
       str('provider_note'),
       providerLastCheckedAt,
@@ -119,6 +127,22 @@ export class VatResource {
       return `https://app.taxora.io/vat/history/${this.uuid}`;
     }
     return `https://app.sandbox.taxora.io/vat/history/${this.uuid}`;
+  }
+
+  isValid(useProviderState = false): boolean {
+    if (useProviderState) {
+      return this.isProviderValid();
+    }
+
+    return this.state === VatState.VALID;
+  }
+
+  isProviderValid(): boolean {
+    if (this.providerValid !== undefined && this.providerValid !== null) {
+      return this.providerValid;
+    }
+
+    return this.providerVatState === VatState.VALID;
   }
 
   toArray(): Record<string, unknown> {
@@ -140,6 +164,7 @@ export class VatResource {
       environment: this.environment ?? null,
       provider: this.provider ?? null,
       used_providers: this.usedProviders ?? null,
+      provider_valid: this.providerValid ?? null,
       provider_vat_state: this.providerVatState ?? null,
       provider_note: this.providerNote ?? null,
       provider_last_checked_at: this.providerLastCheckedAt?.toISOString() ?? null,
