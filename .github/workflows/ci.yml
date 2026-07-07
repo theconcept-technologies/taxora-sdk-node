@@ -13,7 +13,10 @@ jobs:
 
     strategy:
       matrix:
-        node: ['18', '20', '22']
+        # Node 18 is EOL and the test toolchain (vitest 4 / rolldown) requires
+        # node:util.styleText (>= 20.12). The published package itself still
+        # targets engines >= 18.
+        node: ['20', '22', '24']
 
     steps:
       - uses: actions/checkout@v4
