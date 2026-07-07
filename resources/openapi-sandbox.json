@@ -241,12 +241,17 @@
                                         "access_token": {
                                             "description": "New access token",
                                             "type": "string",
-                                            "example": "Bearer <new-access-token>"
+                                            "example": "<new-access-token>"
                                         },
                                         "token_type": {
                                             "description": "Token type",
                                             "type": "string",
                                             "example": "Bearer"
+                                        },
+                                        "expires_in": {
+                                            "description": "Token expiration time in seconds",
+                                            "type": "integer",
+                                            "example": 3600
                                         }
                                     },
                                     "type": "object"
@@ -264,6 +269,121 @@
                 "security": [
                     {
                         "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/billing/usage-summaries": {
+            "get": {
+                "tags": [
+                    "Billing"
+                ],
+                "summary": "List billing usage summaries for the authenticated company",
+                "operationId": "63940a1d555f3b8efac02886131c727c",
+                "parameters": [
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Page size (1-100, default 25)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 25,
+                            "maximum": 100,
+                            "minimum": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated list of usage summaries (newest billing periods first)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "data": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/UsageSummary"
+                                                    }
+                                                },
+                                                "meta": {
+                                                    "properties": {
+                                                        "current_page": {
+                                                            "type": "integer",
+                                                            "example": 1
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer",
+                                                            "example": 25
+                                                        },
+                                                        "total": {
+                                                            "type": "integer",
+                                                            "example": 12
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer",
+                                                            "example": 1
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/billing/usage-summaries/{period}": {
+            "get": {
+                "tags": [
+                    "Billing"
+                ],
+                "summary": "Get the usage summary detail (with events) for a given billing period",
+                "operationId": "61ac09345829140434602272f839d6da",
+                "parameters": [
+                    {
+                        "name": "period",
+                        "in": "path",
+                        "description": "Billing period in YYYY-MM (e.g. 2026-09)",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Summaries with nested events for the period"
+                    },
+                    "400": {
+                        "description": "Invalid period format"
+                    },
+                    "404": {
+                        "description": "No summaries found for this period"
+                    }
+                },
+                "security": [
+                    {
                         "ApiKeyAuth": []
                     }
                 ]
@@ -425,6 +545,96 @@
                     },
                     "400": {
                         "description": "Validation failed"
+                    },
+                    "403": {
+                        "description": "Not enough permissions"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/company/closure-request": {
+            "get": {
+                "tags": [
+                    "Company"
+                ],
+                "summary": "Get the current closure request status",
+                "description": "Get the current pending closure request for the authenticated user's company (if any).",
+                "operationId": "94a9f78ffb8720d91353e28b271d31f0",
+                "responses": {
+                    "200": {
+                        "description": "Current closure request or null"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Company"
+                ],
+                "summary": "Request closure of the authenticated user's company account",
+                "description": "Submit a request to close the whole company account. Closing the account is\nNOT instant — it creates a pending request that a Taxora backend operator must\napprove before any data is touched.",
+                "operationId": "396ecd35150568035ae422853a35d848",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "reason": {
+                                        "type": "string",
+                                        "example": "We no longer need the service",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Closure request submitted"
+                    },
+                    "200": {
+                        "description": "Closure request already pending"
+                    },
+                    "401": {
+                        "description": "Not authorized"
+                    },
+                    "403": {
+                        "description": "Not enough permissions"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Company"
+                ],
+                "summary": "Withdraw a pending closure request",
+                "description": "Withdraw the current pending closure request for the authenticated user's company.",
+                "operationId": "0fe1a3fcafe12f2a6bfda6853892d486",
+                "responses": {
+                    "200": {
+                        "description": "Closure request withdrawn"
+                    },
+                    "401": {
+                        "description": "Not authorized"
                     },
                     "403": {
                         "description": "Not enough permissions"
@@ -692,6 +902,1263 @@
                 "security": [
                     {
                         "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Company"
+                ],
+                "summary": "Remove (soft-delete) a user from the authenticated user's company",
+                "description": "GDPR soft-delete of a single company user (instant). The user is anonymized,\nmarked as \"deleted\" and hidden from listings; retained business records stay intact.",
+                "operationId": "2560b87a605df446a892d61bcfff94eb",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "id"
+                                ],
+                                "properties": {
+                                    "id": {
+                                        "description": "ID of the user to remove",
+                                        "type": "integer",
+                                        "example": 42
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "User removed successfully"
+                    },
+                    "401": {
+                        "description": "Not authorized"
+                    },
+                    "403": {
+                        "description": "Not enough permissions"
+                    },
+                    "422": {
+                        "description": "Validation failed"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/compliance/enrollments": {
+            "get": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "List compliance enrollments for the authenticated company",
+                "operationId": "da61a10cf950be1ac0c38da68c333f90",
+                "parameters": [
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Page size (1-100, default 25)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 25,
+                            "maximum": 100,
+                            "minimum": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated list of enrollments",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "data": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/ComplianceEnrollment"
+                                                    }
+                                                },
+                                                "meta": {
+                                                    "properties": {
+                                                        "current_page": {
+                                                            "type": "integer",
+                                                            "example": 1
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer",
+                                                            "example": 25
+                                                        },
+                                                        "total": {
+                                                            "type": "integer",
+                                                            "example": 3
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer",
+                                                            "example": 1
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Create a compliance enrollment and provision the provider account",
+                "description": "Creates the local enrollment, then the B2Brouter account, then (by default) activates the DGFiP tax report setting. On provider failure the local enrollment is persisted in `error_account`/`error_activation` state for retries.",
+                "operationId": "30232ed599e4168744843cd3c6d6eef3",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "email",
+                                    "naf_code",
+                                    "enterprise_size",
+                                    "type_operation",
+                                    "reporting_start_date"
+                                ],
+                                "properties": {
+                                    "siret": {
+                                        "description": "14-digit SIRET — required if siren missing",
+                                        "type": "string",
+                                        "example": "12345678900012"
+                                    },
+                                    "siren": {
+                                        "description": "9-digit SIREN — required if siret missing",
+                                        "type": "string",
+                                        "example": "123456789"
+                                    },
+                                    "vat_number": {
+                                        "type": "string",
+                                        "example": "FR32123456789"
+                                    },
+                                    "company_name": {
+                                        "type": "string",
+                                        "example": "Acme SARL"
+                                    },
+                                    "address": {
+                                        "type": "string",
+                                        "example": "10 Rue de la Paix"
+                                    },
+                                    "city": {
+                                        "type": "string",
+                                        "example": "Paris"
+                                    },
+                                    "postalcode": {
+                                        "type": "string",
+                                        "example": "75001"
+                                    },
+                                    "province": {
+                                        "type": "string",
+                                        "example": "Île-de-France"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "tax@acme.fr"
+                                    },
+                                    "naf_code": {
+                                        "type": "string",
+                                        "example": "47"
+                                    },
+                                    "enterprise_size": {
+                                        "type": "string",
+                                        "enum": [
+                                            "micro",
+                                            "pme",
+                                            "eti",
+                                            "ge"
+                                        ]
+                                    },
+                                    "type_operation": {
+                                        "type": "string",
+                                        "enum": [
+                                            "services",
+                                            "goods",
+                                            "mixed"
+                                        ]
+                                    },
+                                    "reporting_start_date": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "example": "2026-09-01"
+                                    },
+                                    "auto_activate": {
+                                        "description": "When false, only the account is created — DGFiP tax-report-setting is NOT activated.",
+                                        "type": "boolean",
+                                        "default": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Enrollment created (and activated when auto_activate=true)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/ComplianceEnrollment"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation failed"
+                    },
+                    "502": {
+                        "description": "Provider error — enrollment persisted in error state"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/compliance/enrollments/{id}": {
+            "get": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Get a single compliance enrollment",
+                "operationId": "e6cd9d853047c1be7476973679756163",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                }
+            }
+        },
+        "/compliance/sirene-lookup": {
+            "get": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Look up French company data by SIRET, SIREN or FR VAT number (SIRENE registry)",
+                "description": "Resolves the SIREN from the given identifier and returns official company data from the INSEE SIRENE registry. Rate-limited to 3 requests per minute per user.",
+                "operationId": "84c31556ff52290a52a558a40c1594fd",
+                "parameters": [
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "description": "SIRET (14 digits), SIREN (9 digits) or French VAT number (FR + 2 chars + 9 digits)",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "12345678900012"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Company data found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "company_name": {
+                                                    "type": "string",
+                                                    "example": "Acme SARL",
+                                                    "nullable": true
+                                                },
+                                                "siren": {
+                                                    "type": "string",
+                                                    "example": "123456789",
+                                                    "nullable": true
+                                                },
+                                                "siret": {
+                                                    "type": "string",
+                                                    "example": "12345678900012",
+                                                    "nullable": true
+                                                },
+                                                "naf_code": {
+                                                    "type": "string",
+                                                    "example": "47",
+                                                    "nullable": true
+                                                },
+                                                "naf_full": {
+                                                    "type": "string",
+                                                    "example": "47.19Z",
+                                                    "nullable": true
+                                                },
+                                                "enterprise_size": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "micro",
+                                                        "pme",
+                                                        "eti",
+                                                        "ge"
+                                                    ],
+                                                    "nullable": true
+                                                },
+                                                "address": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                },
+                                                "city": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                },
+                                                "postalcode": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "No company found for the given SIREN"
+                    },
+                    "422": {
+                        "description": "Missing or invalid query parameter q"
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (3 requests/minute)"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/compliance/revenue-statistics": {
+            "get": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Aggregated revenue statistics for e-reporting transactions",
+                "description": "Returns turnover totals, a time series and breakdowns (by transaction type, counterparty country and state) for the authenticated company. Read-only aggregation over the company's transactions. Amounts are computed in the most frequent currency in the range (`primary_currency`); a `by_currency` breakdown and `is_multi_currency` flag surface any other currencies. Defaults to the last 12 months and a monthly interval.",
+                "operationId": "8a79555799629cacd21a55baccc545cb",
+                "parameters": [
+                    {
+                        "name": "date_from",
+                        "in": "query",
+                        "description": "Inclusive lower bound (Y-m-d). Defaults to 12 months ago.",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "date_to",
+                        "in": "query",
+                        "description": "Inclusive upper bound (Y-m-d). Defaults to today. Must be >= date_from.",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "interval",
+                        "in": "query",
+                        "description": "Time-series bucket size. Defaults to month.",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "day",
+                                "week",
+                                "month"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "transaction_type",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "b2c_outbound",
+                                "b2b_domestic_outbound",
+                                "b2b_domestic_inbound",
+                                "crossborder_outbound",
+                                "crossborder_inbound"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "state",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "pending",
+                                "sending",
+                                "submitted",
+                                "error"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "range": {
+                                                    "properties": {
+                                                        "date_from": {
+                                                            "type": "string",
+                                                            "format": "date"
+                                                        },
+                                                        "date_to": {
+                                                            "type": "string",
+                                                            "format": "date"
+                                                        },
+                                                        "interval": {
+                                                            "type": "string",
+                                                            "example": "month"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "primary_currency": {
+                                                    "type": "string",
+                                                    "example": "EUR"
+                                                },
+                                                "is_multi_currency": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                },
+                                                "totals": {
+                                                    "properties": {
+                                                        "count": {
+                                                            "type": "integer",
+                                                            "example": 1234
+                                                        },
+                                                        "subtotal": {
+                                                            "type": "string",
+                                                            "example": "100000.0000"
+                                                        },
+                                                        "tax_amount": {
+                                                            "type": "string",
+                                                            "example": "20000.0000"
+                                                        },
+                                                        "total": {
+                                                            "type": "string",
+                                                            "example": "120000.0000"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "time_series": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "bucket": {
+                                                                "type": "string",
+                                                                "example": "2026-01"
+                                                            },
+                                                            "count": {
+                                                                "type": "integer"
+                                                            },
+                                                            "subtotal": {
+                                                                "type": "string"
+                                                            },
+                                                            "tax_amount": {
+                                                                "type": "string"
+                                                            },
+                                                            "total": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "by_type": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "type": {
+                                                                "type": "string"
+                                                            },
+                                                            "type_label": {
+                                                                "type": "string"
+                                                            },
+                                                            "count": {
+                                                                "type": "integer"
+                                                            },
+                                                            "total": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "by_country": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "country": {
+                                                                "type": "string",
+                                                                "example": "de"
+                                                            },
+                                                            "count": {
+                                                                "type": "integer"
+                                                            },
+                                                            "total": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "by_state": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "state": {
+                                                                "type": "string"
+                                                            },
+                                                            "state_label": {
+                                                                "type": "string"
+                                                            },
+                                                            "count": {
+                                                                "type": "integer"
+                                                            },
+                                                            "total": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "by_currency": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "currency": {
+                                                                "type": "string"
+                                                            },
+                                                            "count": {
+                                                                "type": "integer"
+                                                            },
+                                                            "subtotal": {
+                                                                "type": "string"
+                                                            },
+                                                            "tax_amount": {
+                                                                "type": "string"
+                                                            },
+                                                            "total": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "E-Reporting access is not active"
+                    },
+                    "422": {
+                        "description": "Validation failed"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/compliance/tax-reports": {
+            "get": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "List compliance tax reports for the authenticated company",
+                "operationId": "0a3cbc1b2e5c38987f17bfed5a9c96ea",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/compliance/tax-reports/{id}": {
+            "get": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Get a single tax report",
+                "operationId": "20eb68a982670c1961b43dabee724235",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                }
+            }
+        },
+        "/compliance/transactions": {
+            "get": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "List compliance transactions (filterable by date / state / type)",
+                "operationId": "4fe79e545656f42c0dd6021a0478cd6a",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Record and (optionally) submit a Flux 10 transaction",
+                "description": "Persists the transaction locally, then forwards it to the provider as the appropriate B2Brouter invoice type (IssuedSimplifiedInvoice for B2C, IssuedInvoice for outbound, ReceivedInvoice for inbound). Set `submit_now=false` to defer submission.",
+                "operationId": "35d08bf213aa62e763155887fc57b5d0",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "compliance_enrollment_id",
+                                    "transaction_type",
+                                    "invoice_number",
+                                    "invoice_date",
+                                    "subtotal",
+                                    "total",
+                                    "invoice_lines_attributes"
+                                ],
+                                "properties": {
+                                    "compliance_enrollment_id": {
+                                        "type": "integer",
+                                        "example": 12
+                                    },
+                                    "transaction_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "b2c_outbound",
+                                            "crossborder_outbound",
+                                            "crossborder_inbound",
+                                            "b2b_domestic_outbound",
+                                            "b2b_domestic_inbound"
+                                        ]
+                                    },
+                                    "invoice_number": {
+                                        "type": "string",
+                                        "example": "TKT-2026-00001"
+                                    },
+                                    "invoice_date": {
+                                        "type": "string",
+                                        "format": "date"
+                                    },
+                                    "due_date": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "nullable": true
+                                    },
+                                    "currency": {
+                                        "type": "string",
+                                        "example": "EUR"
+                                    },
+                                    "subtotal": {
+                                        "type": "number",
+                                        "format": "float"
+                                    },
+                                    "tax_amount": {
+                                        "type": "number",
+                                        "format": "float"
+                                    },
+                                    "total": {
+                                        "type": "number",
+                                        "format": "float"
+                                    },
+                                    "counterparty_name": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "counterparty_country": {
+                                        "type": "string",
+                                        "example": "de",
+                                        "nullable": true
+                                    },
+                                    "counterparty_vat_number": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "provider_contact_id": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "invoice_lines_attributes": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "description",
+                                                "quantity",
+                                                "price",
+                                                "taxes_attributes"
+                                            ],
+                                            "properties": {
+                                                "description": {
+                                                    "type": "string"
+                                                },
+                                                "quantity": {
+                                                    "type": "number"
+                                                },
+                                                "price": {
+                                                    "type": "number"
+                                                },
+                                                "unit": {
+                                                    "type": "integer",
+                                                    "example": 9
+                                                },
+                                                "taxes_attributes": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "name": {
+                                                                "type": "string",
+                                                                "example": "TVA"
+                                                            },
+                                                            "percent": {
+                                                                "type": "number",
+                                                                "example": 20
+                                                            },
+                                                            "category": {
+                                                                "description": "S/AA/AAA/K/G/AE/E/Z — see TVA-Konfiguration",
+                                                                "type": "string",
+                                                                "example": "S"
+                                                            },
+                                                            "comment": {
+                                                                "description": "Required when category=E (VATEX code)",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "payment_method": {
+                                        "description": "Required for cross-border outbound",
+                                        "type": "integer",
+                                        "nullable": true
+                                    },
+                                    "remittance_information": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "payment_method_text": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "payment_terms": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "submit_now": {
+                                        "type": "boolean",
+                                        "default": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Transaction created (and submitted when submit_now=true)"
+                    },
+                    "404": {
+                        "description": "Enrollment not found / belongs to another company"
+                    },
+                    "422": {
+                        "description": "Validation failed"
+                    },
+                    "502": {
+                        "description": "Provider error"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/compliance/transactions/{id}": {
+            "get": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Get a single compliance transaction",
+                "operationId": "67410b80e051c4ae2166f9ede1423024",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Update a pending compliance transaction",
+                "description": "Only transactions in 'pending' state can be edited. All body fields are optional; only provided fields are updated. Invoice lines and payment extras replace the stored draft payload.",
+                "operationId": "a150f33e0fa72da34b98483b87ce4619",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Transaction ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "transaction_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "b2c_outbound",
+                                            "crossborder_outbound",
+                                            "crossborder_inbound",
+                                            "b2b_domestic_outbound",
+                                            "b2b_domestic_inbound"
+                                        ]
+                                    },
+                                    "invoice_number": {
+                                        "type": "string",
+                                        "example": "TKT-2026-00001"
+                                    },
+                                    "invoice_date": {
+                                        "type": "string",
+                                        "format": "date"
+                                    },
+                                    "due_date": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "nullable": true
+                                    },
+                                    "currency": {
+                                        "type": "string",
+                                        "example": "EUR",
+                                        "nullable": true
+                                    },
+                                    "subtotal": {
+                                        "type": "number",
+                                        "format": "float"
+                                    },
+                                    "tax_amount": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "nullable": true
+                                    },
+                                    "total": {
+                                        "type": "number",
+                                        "format": "float"
+                                    },
+                                    "counterparty_name": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "counterparty_country": {
+                                        "type": "string",
+                                        "example": "de",
+                                        "nullable": true
+                                    },
+                                    "counterparty_vat_number": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "provider_contact_id": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "invoice_lines_attributes": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "payment_method": {
+                                        "type": "integer",
+                                        "nullable": true
+                                    },
+                                    "remittance_information": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "payment_method_text": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "payment_terms": {
+                                        "type": "string",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated transaction"
+                    },
+                    "404": {
+                        "description": "Transaction not found"
+                    },
+                    "422": {
+                        "description": "Only pending transactions can be edited / validation failed"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Delete a pending compliance transaction",
+                "description": "Only transactions in 'pending' state can be deleted.",
+                "operationId": "bb30c6ed9615d3775d27997d37941c28",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Transaction ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Transaction deleted"
+                    },
+                    "404": {
+                        "description": "Transaction not found"
+                    },
+                    "422": {
+                        "description": "Only pending transactions can be deleted"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/compliance/transactions/{id}/submit": {
+            "post": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Submit (or retry) an existing transaction to the provider",
+                "description": "Submits a transaction that is in 'pending' or 'error' state to B2Brouter/DGFiP. Replays the invoice lines stored in provider_payload so they don't have to be re-sent. Already-submitted transactions are rejected.",
+                "operationId": "ce77bb6c10396aac8c480a0720986cfa",
+                "responses": {
+                    "200": {
+                        "description": "Transaction submitted"
+                    },
+                    "404": {
+                        "description": "Transaction not found"
+                    },
+                    "422": {
+                        "description": "Transaction already submitted / enrollment not provisioned"
+                    },
+                    "502": {
+                        "description": "Provider error"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/compliance/transactions/import": {
+            "post": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Bulk import compliance transactions from a CSV file",
+                "description": "Uploads a semicolon-delimited CSV (max 2 MB). Required columns: invoice_number, invoice_date, transaction_type, subtotal, total, line_description, line_quantity, line_price, tax_name, tax_percent, tax_category. Optional columns: due_date, currency, tax_amount, counterparty_name, counterparty_country, counterparty_vat_number. Rows sharing an invoice_number are grouped into one transaction with multiple lines. Duplicates (same invoice natural key) are skipped without error.",
+                "operationId": "a248d35a72961714ffbd408579ab505e",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "compliance_enrollment_id",
+                                    "file"
+                                ],
+                                "properties": {
+                                    "compliance_enrollment_id": {
+                                        "type": "integer",
+                                        "example": 12
+                                    },
+                                    "file": {
+                                        "description": "CSV file, ';' delimiter, max 2048 KB",
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Import result",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "created": {
+                                                    "type": "integer",
+                                                    "example": 42
+                                                },
+                                                "skipped_duplicates": {
+                                                    "type": "integer",
+                                                    "example": 3
+                                                },
+                                                "errors": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    },
+                                                    "example": [
+                                                        "Row 5: invalid transaction_type 'invalid'"
+                                                    ]
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Enrollment not found for this company"
+                    },
+                    "422": {
+                        "description": "Missing CSV columns / unreadable file / validation failed"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/compliance/vat-rates": {
+            "get": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "List the VAT rates & DGFiP tax categories for a reporting country",
+                "description": "Returns the canonical VAT rates and DGFiP tax categories (single source of truth, maintained in config/compliance.php). The rates are the seller's reporting-country rates. Defaults to the configured default country when no/unknown country is given.",
+                "operationId": "1a82e9cb07033a70f4576ff55bd32dba",
+                "parameters": [
+                    {
+                        "name": "country",
+                        "in": "query",
+                        "description": "ISO 3166-1 alpha-2 reporting country code (e.g. FR)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "FR"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "VAT rates for the country"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/compliance/e-reporting-request": {
+            "post": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Request activation of the E-Reporting feature",
+                "description": "Submits an activation request for the E-Reporting feature. Intentionally NOT gated by the compliance access middleware, so customers without the feature can request it. The authenticated user's name/email are used as identity; body values are fallbacks only.",
+                "operationId": "05eec6d3afa30f0dc4df8ae888423c6a",
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "nullable": true
+                                    },
+                                    "email": {
+                                        "description": "Fallback if the authenticated user has no email",
+                                        "type": "string",
+                                        "format": "email",
+                                        "maxLength": 255,
+                                        "nullable": true
+                                    },
+                                    "company": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "nullable": true
+                                    },
+                                    "phone": {
+                                        "type": "string",
+                                        "maxLength": 64,
+                                        "nullable": true
+                                    },
+                                    "message": {
+                                        "type": "string",
+                                        "maxLength": 5000,
+                                        "nullable": true
+                                    },
+                                    "language": {
+                                        "type": "string",
+                                        "example": "en",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Request stored and forwarded to the team"
+                    },
+                    "422": {
+                        "description": "Validation failed / email missing"
+                    }
+                },
+                "security": [
+                    {
                         "ApiKeyAuth": []
                     }
                 ]
@@ -1423,6 +2890,735 @@
                     },
                     "404": {
                         "description": "Not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/smart-enrichment": {
+            "post": {
+                "tags": [
+                    "Smart Enrichment"
+                ],
+                "summary": "Reverse VAT lookup (single)",
+                "description": "Resolves a company name + address + country to its VAT/UID number with a confidence score. Returns a result synchronously when a confident match is found in your validated data; otherwise responds 202 with a jobId to poll (and delivers the result via the `enrichment.completed` webhook). Requires the Smart Enrichment add-on.",
+                "operationId": "adc0601e4decccfbaf28314a80d4ac85",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "companyName",
+                                    "country"
+                                ],
+                                "properties": {
+                                    "companyName": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "example": "Example Company GmbH"
+                                    },
+                                    "country": {
+                                        "description": "ISO 3166-1 alpha-2 country code",
+                                        "type": "string",
+                                        "maxLength": 2,
+                                        "minLength": 2,
+                                        "example": "AT"
+                                    },
+                                    "street": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "example": "Main Street 10",
+                                        "nullable": true
+                                    },
+                                    "postalCode": {
+                                        "type": "string",
+                                        "maxLength": 32,
+                                        "example": "1010",
+                                        "nullable": true
+                                    },
+                                    "city": {
+                                        "type": "string",
+                                        "maxLength": 128,
+                                        "example": "Vienna",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Synchronous result",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SmartEnrichmentResult"
+                                }
+                            }
+                        }
+                    },
+                    "202": {
+                        "description": "Accepted — processing asynchronously",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "jobId": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "example": "processing"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Smart Enrichment access not active"
+                    },
+                    "404": {
+                        "description": "Feature not available"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/smart-enrichment/bulk": {
+            "post": {
+                "tags": [
+                    "Smart Enrichment"
+                ],
+                "summary": "Reverse VAT lookup (bulk)",
+                "description": "Submits a batch of company records for reverse VAT lookup. Always processed asynchronously: responds 202 with a jobId; per-item results are delivered via the `enrichment.completed` webhook and retrievable via GET /v1/smart-enrichment/{jobId}.",
+                "operationId": "96c9ae19e7f58603844628db064d6791",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "items"
+                                ],
+                                "properties": {
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "companyName",
+                                                "country"
+                                            ],
+                                            "properties": {
+                                                "companyName": {
+                                                    "type": "string",
+                                                    "example": "Example Company GmbH"
+                                                },
+                                                "country": {
+                                                    "type": "string",
+                                                    "example": "DE"
+                                                },
+                                                "street": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                },
+                                                "postalCode": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                },
+                                                "city": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "202": {
+                        "description": "Accepted — batch processing asynchronously",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "jobId": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "example": "processing"
+                                        },
+                                        "itemCount": {
+                                            "type": "integer",
+                                            "example": 2
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Smart Enrichment access not active"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/smart-enrichment/usage": {
+            "get": {
+                "tags": [
+                    "Smart Enrichment"
+                ],
+                "summary": "Quota usage",
+                "description": "Returns the current billing-period Smart Enrichment usage: matches used, the included monthly allowance, remaining included matches, the per-match overage price, and the optional hard cap. Usage is counted in successful matches.",
+                "operationId": "50170e74c115486eebba3beb914e88d8",
+                "responses": {
+                    "200": {
+                        "description": "Usage",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "period": {
+                                            "type": "string",
+                                            "example": "2026-06"
+                                        },
+                                        "used": {
+                                            "type": "integer",
+                                            "example": 312
+                                        },
+                                        "included": {
+                                            "type": "integer",
+                                            "example": 300
+                                        },
+                                        "remaining": {
+                                            "type": "integer",
+                                            "example": 0
+                                        },
+                                        "overageCount": {
+                                            "type": "integer",
+                                            "example": 12
+                                        },
+                                        "overagePrice": {
+                                            "type": "number",
+                                            "format": "float",
+                                            "example": 0.08
+                                        },
+                                        "overageAmount": {
+                                            "description": "Amount due this period (overage matches × price)",
+                                            "type": "number",
+                                            "format": "float",
+                                            "example": 0.96
+                                        },
+                                        "hardCap": {
+                                            "type": "integer",
+                                            "example": null,
+                                            "nullable": true
+                                        },
+                                        "history": {
+                                            "description": "Recent monthly billing for full transparency",
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "period": {
+                                                        "type": "string",
+                                                        "example": "2026-05"
+                                                    },
+                                                    "matches": {
+                                                        "type": "integer",
+                                                        "example": 420
+                                                    },
+                                                    "amount": {
+                                                        "type": "string",
+                                                        "example": "9.60"
+                                                    },
+                                                    "state": {
+                                                        "type": "string",
+                                                        "example": "billed"
+                                                    },
+                                                    "billingType": {
+                                                        "type": "string",
+                                                        "example": "manual",
+                                                        "nullable": true
+                                                    },
+                                                    "manualReference": {
+                                                        "type": "string",
+                                                        "example": "INV-2026-0042",
+                                                        "nullable": true
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Smart Enrichment access not active"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/smart-enrichment/history": {
+            "get": {
+                "tags": [
+                    "Smart Enrichment"
+                ],
+                "summary": "Lookup history",
+                "description": "Paginated history of Smart Enrichment lookups for the authenticated company, newest first. Each row is a compact summary (the query and the headline result); full detail is available via GET /v1/smart-enrichment/{jobId}.",
+                "operationId": "fb03efc2987e03d17d29d96124f6b879",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        }
+                    },
+                    {
+                        "name": "perPage",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 25,
+                            "maximum": 100
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated history",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/SmartEnrichmentHistoryRow"
+                                            }
+                                        },
+                                        "meta": {
+                                            "properties": {
+                                                "currentPage": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "perPage": {
+                                                    "type": "integer",
+                                                    "example": 25
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 42
+                                                },
+                                                "lastPage": {
+                                                    "type": "integer",
+                                                    "example": 2
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Smart Enrichment access not active"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/smart-enrichment/export": {
+            "get": {
+                "tags": [
+                    "Smart Enrichment"
+                ],
+                "summary": "Export lookups as CSV",
+                "description": "Download the authenticated company's Smart Enrichment lookups as a CSV in the bulk-input shape plus resolved VAT columns. Optional filters: date range (created_at), minimum confidence, item status, and only-found.",
+                "operationId": "265fd138147784cc6d83405951b95c88",
+                "parameters": [
+                    {
+                        "name": "date_from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "date_to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "min_confidence",
+                        "in": "query",
+                        "description": "0–100",
+                        "required": false,
+                        "schema": {
+                            "type": "number",
+                            "format": "float"
+                        }
+                    },
+                    {
+                        "name": "status[]",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "found",
+                                    "no_vat_exists",
+                                    "not_found"
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "name": "only_found",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CSV file",
+                        "content": {
+                            "text/csv": {}
+                        }
+                    },
+                    "403": {
+                        "description": "Smart Enrichment access not active"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/smart-enrichment/statistics": {
+            "get": {
+                "tags": [
+                    "Smart Enrichment"
+                ],
+                "summary": "Lookup statistics",
+                "description": "Aggregated Smart Enrichment statistics for the authenticated company: headline totals (lookups, items, matches, match rate, average confidence), a time series, and breakdowns by source, outcome and confidence band. Read-only. Defaults to the last 12 months and a monthly interval.",
+                "operationId": "e8eca054b53eafbd132f4c0c835bb6dd",
+                "parameters": [
+                    {
+                        "name": "date_from",
+                        "in": "query",
+                        "description": "Inclusive lower bound (Y-m-d). Defaults to 12 months ago.",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "date_to",
+                        "in": "query",
+                        "description": "Inclusive upper bound (Y-m-d). Defaults to today. Must be >= date_from.",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "interval",
+                        "in": "query",
+                        "description": "Time-series bucket size. Defaults to month.",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "day",
+                                "week",
+                                "month"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Statistics",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "range": {
+                                            "properties": {
+                                                "date_from": {
+                                                    "type": "string",
+                                                    "format": "date"
+                                                },
+                                                "date_to": {
+                                                    "type": "string",
+                                                    "format": "date"
+                                                },
+                                                "interval": {
+                                                    "type": "string",
+                                                    "example": "month"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "totals": {
+                                            "properties": {
+                                                "jobs": {
+                                                    "type": "integer",
+                                                    "example": 42
+                                                },
+                                                "items": {
+                                                    "type": "integer",
+                                                    "example": 120
+                                                },
+                                                "found": {
+                                                    "type": "integer",
+                                                    "example": 96
+                                                },
+                                                "found_rate": {
+                                                    "type": "number",
+                                                    "format": "float",
+                                                    "example": 80
+                                                },
+                                                "avg_confidence": {
+                                                    "type": "number",
+                                                    "format": "float",
+                                                    "example": 87.4
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "time_series": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "bucket": {
+                                                        "type": "string",
+                                                        "example": "2026-06"
+                                                    },
+                                                    "jobs": {
+                                                        "type": "integer"
+                                                    },
+                                                    "items": {
+                                                        "type": "integer"
+                                                    },
+                                                    "found": {
+                                                        "type": "integer"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        },
+                                        "by_source": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "source": {
+                                                        "type": "string",
+                                                        "example": "api"
+                                                    },
+                                                    "jobs": {
+                                                        "type": "integer"
+                                                    },
+                                                    "found": {
+                                                        "type": "integer"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        },
+                                        "by_outcome": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "outcome": {
+                                                        "type": "string",
+                                                        "example": "found"
+                                                    },
+                                                    "count": {
+                                                        "type": "integer"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        },
+                                        "confidence_buckets": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "bucket": {
+                                                        "type": "string",
+                                                        "example": "high"
+                                                    },
+                                                    "count": {
+                                                        "type": "integer"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Smart Enrichment access not active"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/smart-enrichment/{jobId}": {
+            "get": {
+                "tags": [
+                    "Smart Enrichment"
+                ],
+                "summary": "Get a lookup job",
+                "description": "Returns a single or bulk Smart Enrichment job by id. A single lookup returns a flat result; a bulk job returns per-item results plus progress counters.",
+                "operationId": "7d9006b73411dfd236036d37b0185d4b",
+                "parameters": [
+                    {
+                        "name": "jobId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Job result",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "oneOf": [
+                                        {
+                                            "$ref": "#/components/schemas/SmartEnrichmentResult"
+                                        },
+                                        {
+                                            "properties": {
+                                                "jobId": {
+                                                    "type": "string",
+                                                    "format": "uuid"
+                                                },
+                                                "status": {
+                                                    "type": "string",
+                                                    "example": "completed"
+                                                },
+                                                "itemCount": {
+                                                    "type": "integer"
+                                                },
+                                                "completedCount": {
+                                                    "type": "integer"
+                                                },
+                                                "foundCount": {
+                                                    "type": "integer"
+                                                },
+                                                "results": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/SmartEnrichmentResultItem"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Smart Enrichment access not active"
+                    },
+                    "404": {
+                        "description": "Job not found"
                     }
                 },
                 "security": [
@@ -2730,10 +4926,801 @@
                     }
                 }
             }
+        },
+        "/v1/webhooks": {
+            "get": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "List webhook endpoints",
+                "description": "Returns all webhook endpoints configured for the authenticated company.",
+                "operationId": "251ec39272318a1b91510bc856f5fc9e",
+                "responses": {
+                    "200": {
+                        "description": "List of webhook endpoints",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/WebhookEndpoint"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not authorized"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Create a webhook endpoint",
+                "description": "Registers a new HTTPS endpoint. The signing **secret** is returned **once** in this response — store it securely. It will not be visible again via the API.",
+                "operationId": "41ce50fb0d496d307346c5aa76166bb2",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "url",
+                                    "events"
+                                ],
+                                "properties": {
+                                    "url": {
+                                        "description": "Must be HTTPS",
+                                        "type": "string",
+                                        "format": "uri",
+                                        "example": "https://your-server.com/taxora-webhook"
+                                    },
+                                    "events": {
+                                        "description": "Event types this endpoint subscribes to. At least one required.",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "enum": [
+                                                "vat.validated",
+                                                "vat.state_changed",
+                                                "compliance.ledger.state_changed",
+                                                "compliance.transaction.state_changed"
+                                            ]
+                                        },
+                                        "example": [
+                                            "vat.validated"
+                                        ]
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "default": true
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "example": "Production webhook",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Endpoint created. The secret is only returned here.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "endpoint": {
+                                                    "$ref": "#/components/schemas/WebhookEndpoint"
+                                                },
+                                                "secret": {
+                                                    "description": "64-character hex secret used to verify the X-Taxora-Signature header on incoming webhook requests. Save this — it will never be shown again.",
+                                                    "type": "string",
+                                                    "example": "a3f8...d2c1"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Validation failed"
+                    },
+                    "401": {
+                        "description": "Not authorized"
+                    },
+                    "422": {
+                        "description": "Endpoint limit reached (max 20 per company)"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/webhooks/{id}": {
+            "get": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Get a webhook endpoint",
+                "operationId": "22931aeae54bd39fe9921ad9e491eb58",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Webhook endpoint",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/WebhookEndpoint"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not authorized"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Update a webhook endpoint",
+                "description": "Partially update URL, event subscriptions, active state or description. All fields are optional.",
+                "operationId": "25a2796d5623e7b6931773d543df8ad1",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "url": {
+                                        "type": "string",
+                                        "format": "uri"
+                                    },
+                                    "events": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "enum": [
+                                                "vat.validated",
+                                                "vat.state_changed",
+                                                "compliance.ledger.state_changed",
+                                                "compliance.transaction.state_changed"
+                                            ]
+                                        }
+                                    },
+                                    "is_active": {
+                                        "type": "boolean"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated endpoint",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/WebhookEndpoint"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Validation failed"
+                    },
+                    "401": {
+                        "description": "Not authorized"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Delete a webhook endpoint",
+                "description": "Permanently deletes the endpoint and all its delivery records.",
+                "operationId": "2bade0a3abd8228a02e86a39952955d7",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deleted successfully"
+                    },
+                    "401": {
+                        "description": "Not authorized"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/webhooks/{id}/deliveries": {
+            "get": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "List delivery attempts",
+                "description": "Returns the last 100 delivery attempts for this endpoint, newest first. Deliveries are retained for 30 days.",
+                "operationId": "c26467ee5ce0dd2a39c746027eb2a146",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated delivery log",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "data": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/WebhookDelivery"
+                                                    }
+                                                },
+                                                "meta": {
+                                                    "properties": {
+                                                        "current_page": {
+                                                            "type": "integer"
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer"
+                                                        },
+                                                        "total": {
+                                                            "type": "integer"
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not authorized"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/webhooks/{id}/test": {
+            "post": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Send a test event",
+                "description": "Dispatches a `webhook.test` delivery to verify your endpoint is reachable and correctly verifying the signature. Check the delivery log to see the outcome.",
+                "operationId": "d2da11b123131e2a94f162da46e65307",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Test dispatched",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "delivery_id": {
+                                                    "description": "UUID of the created delivery record",
+                                                    "type": "string",
+                                                    "format": "uuid"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not authorized"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
         }
     },
     "components": {
         "schemas": {
+            "ComplianceEnrollment": {
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 12
+                    },
+                    "company_id": {
+                        "type": "integer",
+                        "example": 42
+                    },
+                    "country": {
+                        "type": "string",
+                        "example": "fr"
+                    },
+                    "regime": {
+                        "type": "string",
+                        "example": "dgfip_flux10"
+                    },
+                    "provider": {
+                        "type": "string",
+                        "example": "b2brouter"
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "regime_activated"
+                    },
+                    "status_label": {
+                        "type": "string",
+                        "example": "Regime activated"
+                    },
+                    "status_error": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "provider_account_id": {
+                        "type": "string",
+                        "example": "83428"
+                    },
+                    "tax_id": {
+                        "type": "string",
+                        "example": "FR32123456789"
+                    },
+                    "company_register_id": {
+                        "type": "string",
+                        "example": "12345678900012"
+                    },
+                    "company_register_scheme": {
+                        "type": "string",
+                        "example": "0009"
+                    },
+                    "regime_config": {
+                        "type": "object",
+                        "example": {
+                            "naf_code": "47",
+                            "enterprise_size": "pme",
+                            "type_operation": "mixed"
+                        }
+                    },
+                    "reporting_start_date": {
+                        "type": "string",
+                        "format": "date",
+                        "example": "2026-09-01"
+                    },
+                    "notification_email": {
+                        "type": "string",
+                        "example": "tax@acme.fr"
+                    },
+                    "auto_send": {
+                        "type": "boolean",
+                        "example": true
+                    }
+                },
+                "type": "object"
+            },
+            "SmartEnrichmentResultItem": {
+                "properties": {
+                    "status": {
+                        "description": "`no_vat_exists` = the company exists but legitimately has no VAT/UID (not an error, not billed).",
+                        "type": "string",
+                        "enum": [
+                            "found",
+                            "no_vat_exists",
+                            "not_found",
+                            "processing"
+                        ],
+                        "example": "found"
+                    },
+                    "vatNumber": {
+                        "type": "string",
+                        "example": "ATU12345678",
+                        "nullable": true
+                    },
+                    "vatType": {
+                        "type": "string",
+                        "example": "ust_idnr",
+                        "nullable": true
+                    },
+                    "confidence": {
+                        "description": "0–100",
+                        "type": "number",
+                        "format": "float",
+                        "example": 96,
+                        "nullable": true
+                    },
+                    "matchedCompanyName": {
+                        "type": "string",
+                        "example": "Example Company GmbH",
+                        "nullable": true
+                    },
+                    "matchedAddress": {
+                        "description": "Official/registered address of the matched company, when available.",
+                        "type": "string",
+                        "example": "Hauptstraße 10, 1010 Wien, AT",
+                        "nullable": true
+                    },
+                    "country": {
+                        "type": "string",
+                        "example": "AT",
+                        "nullable": true
+                    },
+                    "source": {
+                        "type": "string",
+                        "example": "corpus",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
+            "SmartEnrichmentResult": {
+                "description": "Single-lookup response: a job id plus the resolved result fields.",
+                "type": "object",
+                "allOf": [
+                    {
+                        "properties": {
+                            "jobId": {
+                                "type": "string",
+                                "format": "uuid"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    {
+                        "$ref": "#/components/schemas/SmartEnrichmentResultItem"
+                    }
+                ]
+            },
+            "SmartEnrichmentHistoryRow": {
+                "properties": {
+                    "jobId": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "found"
+                    },
+                    "isBulk": {
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "itemCount": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "foundCount": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "query": {
+                        "properties": {
+                            "companyName": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "country": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "city": {
+                                "type": "string",
+                                "nullable": true
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "input": {
+                        "description": "Full first input (incl. street + postalCode) for the detail view.",
+                        "properties": {
+                            "companyName": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "street": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "postalCode": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "city": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "country": {
+                                "type": "string",
+                                "nullable": true
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "result": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/SmartEnrichmentResultItem"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "finishedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
+            "WebhookEndpoint": {
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "url": {
+                        "type": "string",
+                        "format": "uri",
+                        "example": "https://your-server.com/taxora-webhook"
+                    },
+                    "events": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": [
+                                "vat.validated",
+                                "vat.state_changed",
+                                "compliance.ledger.state_changed",
+                                "compliance.transaction.state_changed"
+                            ]
+                        },
+                        "example": [
+                            "vat.validated",
+                            "compliance.ledger.state_changed"
+                        ]
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Production webhook",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-05-20T10:00:00+00:00"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-05-20T10:00:00+00:00"
+                    }
+                },
+                "type": "object"
+            },
+            "WebhookDelivery": {
+                "properties": {
+                    "id": {
+                        "description": "Delivery UUID — also present as 'id' in the sent payload",
+                        "type": "string",
+                        "format": "uuid",
+                        "example": "550e8400-e29b-41d4-a716-446655440000"
+                    },
+                    "event_type": {
+                        "type": "string",
+                        "example": "vat.validated"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "pending",
+                            "delivered",
+                            "failed"
+                        ],
+                        "example": "delivered"
+                    },
+                    "payload": {
+                        "description": "The exact JSON body sent to your endpoint",
+                        "type": "object"
+                    },
+                    "http_status": {
+                        "type": "integer",
+                        "example": 200,
+                        "nullable": true
+                    },
+                    "response_body": {
+                        "description": "First 4 096 bytes of your endpoint's response body",
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "attempts": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "delivered_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "type": "object"
+            },
             "UserResource": {
                 "title": "User Resource",
                 "description": "Authenticated user resource with permissions",
@@ -2953,6 +5940,98 @@
                     "updated_at": {
                         "type": "string",
                         "format": "date-time"
+                    }
+                },
+                "type": "object"
+            },
+            "UsageSummary": {
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 123
+                    },
+                    "company_id": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "feature": {
+                        "type": "string",
+                        "example": "ereporting_transaction"
+                    },
+                    "country": {
+                        "type": "string",
+                        "example": "FR",
+                        "nullable": true
+                    },
+                    "regime": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "billing_period": {
+                        "type": "string",
+                        "example": "2026-06"
+                    },
+                    "event_count": {
+                        "type": "integer",
+                        "example": 500
+                    },
+                    "billable_amount": {
+                        "type": "string",
+                        "example": "49.00",
+                        "nullable": true
+                    },
+                    "state": {
+                        "type": "string",
+                        "example": "open",
+                        "nullable": true
+                    },
+                    "state_label": {
+                        "type": "string",
+                        "example": "Open",
+                        "nullable": true
+                    },
+                    "period_closed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "billing_triggered_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "billed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "stripe_invoice_id": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "stripe_subscription_item_id": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "billing_notes": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "events": {
+                        "type": "array",
+                        "items": {
+                            "type": "object"
+                        }
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
                     }
                 },
                 "type": "object"
@@ -3545,8 +6624,20 @@
             "description": "Endpoints related to VAT operations. Sandbox & development environment users can reference the VatSandboxTestData schema for ready-to-use test VAT UIDs."
         },
         {
+            "name": "Webhooks",
+            "description": "Configure outgoing webhook endpoints and inspect delivery history"
+        },
+        {
             "name": "Authentication",
             "description": "Authentication"
+        },
+        {
+            "name": "Billing",
+            "description": "Billing"
+        },
+        {
+            "name": "Compliance",
+            "description": "Compliance"
         },
         {
             "name": "Partners",
@@ -3555,6 +6646,10 @@
         {
             "name": "Reports",
             "description": "Reports"
+        },
+        {
+            "name": "Smart Enrichment",
+            "description": "Smart Enrichment"
         },
         {
             "name": "Tenant",

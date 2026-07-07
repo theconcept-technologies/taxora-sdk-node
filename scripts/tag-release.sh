@@ -89,8 +89,17 @@ bump_package_json() {
     const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
     pkg.version = '$version';
     fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+
+    // Keep the runtime SDK version constant (sent as the X-Taxora-SDK-Version
+    // header) in sync with package.json.
+    const versionFile = 'src/version.ts';
+    if (fs.existsSync(versionFile)) {
+      let src = fs.readFileSync(versionFile, 'utf8');
+      src = src.replace(/export const SDK_VERSION = '[^']*';/, \"export const SDK_VERSION = '$version';\");
+      fs.writeFileSync(versionFile, src);
+    }
   "
-  git add package.json
+  git add package.json src/version.ts
   git commit -m "chore: bump version to v$version"
 }
 

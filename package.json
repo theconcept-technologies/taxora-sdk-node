@@ -1,6 +1,6 @@
 {
   "name": "@taxora/sdk",
-  "version": "1.0.7",
+  "version": "1.1.0",
   "description": "Taxora VAT Validation API SDK for Node.js",
   "license": "MIT",
   "type": "module",
@@ -36,16 +36,18 @@
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.1.0",
     "@typescript-eslint/eslint-plugin": "^8.58.2",
     "@typescript-eslint/parser": "^8.58.2",
-    "@vitest/coverage-v8": "^3.2.4",
-    "eslint": "^9.39.4",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.6.0",
     "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.7.0",
     "prettier": "^3.3.3",
     "tsup": "^8.0.0",
     "typescript": "^6.0.3",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.10"
   },
   "keywords": [
     "taxora",
@@ -68,5 +70,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1"
   }
 }

@@ -7,7 +7,10 @@ import { Environment } from '../../src/enums/Environment.js';
 import { AuthEndpoint } from '../../src/endpoints/AuthEndpoint.js';
 import { VatEndpoint } from '../../src/endpoints/VatEndpoint.js';
 import { CompanyEndpoint } from '../../src/endpoints/CompanyEndpoint.js';
+import { EReportingEndpoint } from '../../src/endpoints/EReportingEndpoint.js';
+import { SmartEnrichmentEndpoint } from '../../src/endpoints/SmartEnrichmentEndpoint.js';
 import { AuthenticationException } from '../../src/exceptions/AuthenticationException.js';
+import { SDK_VERSION } from '../../src/version.js';
 
 const TOKEN_RESPONSE = {
   success: true,
@@ -36,11 +39,50 @@ function makeClient(responses: Response[], environment = Environment.SANDBOX) {
 }
 
 describe('TaxoraClient', () => {
-  it('exposes auth, vat, and company endpoints', () => {
+  it('exposes auth, vat, company, smartEnrichment and eReporting endpoints', () => {
     const { taxoraClient } = makeClient([]);
     expect(taxoraClient.auth).toBeInstanceOf(AuthEndpoint);
     expect(taxoraClient.vat).toBeInstanceOf(VatEndpoint);
     expect(taxoraClient.company).toBeInstanceOf(CompanyEndpoint);
+    expect(taxoraClient.smartEnrichment).toBeInstanceOf(SmartEnrichmentEndpoint);
+    expect(taxoraClient.eReporting).toBeInstanceOf(EReportingEndpoint);
+  });
+
+  it('wires smartEnrichment through the 401-refreshing client', async () => {
+    const validToken = new Token('valid-token', 'Bearer', new Date(Date.now() + 3600_000));
+    const { taxoraClient, storage, client } = makeClient([
+      SequenceHttpClient.jsonResponse({ message: 'Unauthorized' }, 401), // first attempt → 401
+      SequenceHttpClient.jsonResponse(TOKEN_RESPONSE), // refresh
+      SequenceHttpClient.jsonResponse({ jobId: 'job-1', status: 'found' }), // retry
+    ]);
+    storage.set(validToken);
+
+    const job = await taxoraClient.smartEnrichment.get('job-1');
+
+    expect(job.jobId).toBe('job-1');
+    expect(client.requests).toHaveLength(3);
+    expect(client.requests[1]?.url).toContain('/auth/refresh');
+    const retryHeaders = client.requests[2]?.options?.headers as Record<string, string>;
+    expect(retryHeaders['Authorization']).toBe('Bearer refreshed-token');
+  });
+
+  it('wires eReporting through the 401-refreshing client', async () => {
+    const validToken = new Token('valid-token', 'Bearer', new Date(Date.now() + 3600_000));
+    const { taxoraClient, storage, client } = makeClient([
+      SequenceHttpClient.jsonResponse({ message: 'Unauthorized' }, 401), // first attempt → 401
+      SequenceHttpClient.jsonResponse(TOKEN_RESPONSE), // refresh
+      SequenceHttpClient.jsonResponse({ success: true, data: { data: [], meta: {} } }), // retry
+    ]);
+    storage.set(validToken);
+
+    const page = await taxoraClient.eReporting.listEnrollments();
+
+    expect(page.length).toBe(0);
+    expect(client.requests).toHaveLength(3);
+    expect(client.requests[0]?.url).toContain('/compliance/enrollments');
+    expect(client.requests[1]?.url).toContain('/auth/refresh');
+    const retryHeaders = client.requests[2]?.options?.headers as Record<string, string>;
+    expect(retryHeaders['Authorization']).toBe('Bearer refreshed-token');
   });
 
   it('uses SANDBOX base URL for sandbox environment', () => {
@@ -103,6 +145,26 @@ describe('TaxoraClient', () => {
       api_rate_limit: 100,
       vat_rate_limit: 100,
     });
+  });
+
+  it('stamps the SDK version header on auth requests', async () => {
+    const { taxoraClient, client } = makeClient([SequenceHttpClient.jsonResponse(TOKEN_RESPONSE)]);
+
+    await taxoraClient.auth.login('user@example.com', 'secret', 'unit-test-device');
+
+    const headers = client.requests[0]?.options?.headers as Record<string, string>;
+    expect(headers['X-Taxora-SDK-Version']).toBe(`taxora-node/${SDK_VERSION}`);
+  });
+
+  it('stamps the SDK version header on non-auth requests', async () => {
+    const validToken = new Token('valid-token', 'Bearer', new Date(Date.now() + 3600_000));
+    const { taxoraClient, storage, client } = makeClient([SequenceHttpClient.jsonResponse(COMPANY_RESPONSE)]);
+    storage.set(validToken);
+
+    await taxoraClient.company.get();
+
+    const headers = client.requests[0]?.options?.headers as Record<string, string>;
+    expect(headers['X-Taxora-SDK-Version']).toBe(`taxora-node/${SDK_VERSION}`);
   });
 
   it('bubbles AuthenticationException when refresh fails after 401', async () => {

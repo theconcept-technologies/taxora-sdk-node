@@ -301,6 +301,303 @@ const results = await client.vat.search('Alpha Handels', 25 /* perPage */);
 
 ---
 
+## 🔎 Smart Enrichment (reverse VAT lookup)
+
+Resolve a company **name + address + country → VAT number + confidence**. A confident match
+returns synchronously; harder cases (and all bulk batches) are processed asynchronously and
+delivered via the `enrichment.completed` webhook — poll with `get(jobId)` in the meantime.
+Requires the Smart Enrichment add-on to be active on your account.
+
+```ts
+// Single lookup
+let job = await client.smartEnrichment.lookup({
+  companyName: 'Example Company GmbH',
+  country: 'AT',
+  street: 'Main Street 10',
+  postalCode: '1010',
+  city: 'Vienna',
+});
+
+if (job.isProcessing()) {
+  // Resolved asynchronously — poll until done (or wait for the webhook)
+  job = await client.smartEnrichment.waitForCompletion(job.jobId, {
+    pollIntervalMs: 2000, // optional, default 2000
+    timeoutMs: 120_000, // optional, default 120000 — throws TaxoraException on timeout
+  });
+}
+
+const result = job.result();
+console.log(result?.status); // 'found' | 'no_vat_exists' | 'not_found'
+console.log(result?.vatNumber); // e.g. 'ATU12345678'
+console.log(result?.confidence); // 0–100
+
+// Bulk lookup (always async → webhook + polling)
+const bulk = await client.smartEnrichment.bulkLookup([
+  { companyName: 'A GmbH', country: 'DE', city: 'Berlin' },
+  { companyName: 'B SARL', country: 'FR' },
+]);
+const done = await client.smartEnrichment.waitForCompletion(bulk.jobId);
+for (const r of done.results) {
+  console.log(r.status, r.vatNumber ?? '—', r.matchedAddress ?? '');
+}
+
+// Lookup history (paginated, newest first; perPage is capped at 100 server-side)
+const history = await client.smartEnrichment.history(1, 25, 'Example GmbH' /* optional free-text search */);
+console.log(`${history.total} lookups`);
+console.log(history.stats?.total, history.stats?.found); // account-wide tiles (independent of the search filter)
+for (const row of history) {
+  console.log(row.queryCompanyName, '→', row.result?.vatNumber ?? row.status);
+}
+```
+
+### Quota usage & billing history
+
+```ts
+const usage = await client.smartEnrichment.usage();
+console.log(usage.period, `${usage.used}/${usage.included}`, 'remaining:', usage.remaining);
+console.log(usage.overageCount, '×', usage.overagePrice, '=', usage.overageAmount);
+for (const entry of usage.history) {
+  console.log(entry.period, entry.matches, entry.amount, entry.state); // 'billed' | 'pending'
+}
+```
+
+### CSV export
+
+Download your lookups as CSV in the bulk-input shape plus the resolved VAT columns (bulk jobs
+are flattened to one line per input row). All filters are optional.
+
+```ts
+import { SmartEnrichmentStatus } from '@taxora/sdk';
+import { writeFileSync } from 'fs';
+
+const csv = await client.smartEnrichment.export({
+  dateFrom: '2026-01-01', // job created_at lower bound (YYYY-MM-DD)
+  dateTo: '2026-06-30', // job created_at upper bound (YYYY-MM-DD)
+  minConfidence: 80, // 0–100
+  status: [SmartEnrichmentStatus.FOUND, SmartEnrichmentStatus.NO_VAT_EXISTS],
+  onlyFound: true, // only rows that resolved to a VAT number
+});
+writeFileSync('smart-enrichment.csv', csv);
+```
+
+### Statistics
+
+Aggregated lookup statistics: headline totals, a time series and breakdowns by source, outcome
+and confidence band. Defaults to the last 12 months and a monthly interval (server-side).
+
+```ts
+const stats = await client.smartEnrichment.statistics({
+  dateFrom: '2026-01-01', // optional (YYYY-MM-DD)
+  dateTo: '2026-06-30', // optional (YYYY-MM-DD)
+  interval: 'month', // 'day' | 'week' | 'month'
+});
+
+console.log(stats.totals.items, 'items,', stats.totals.found, `found (${stats.totals.foundRate}%)`);
+console.log('avg confidence:', stats.totals.avgConfidence);
+for (const bucket of stats.timeSeries) {
+  console.log(`${bucket.bucket}: ${bucket.found}/${bucket.items}`);
+}
+for (const band of stats.confidenceBuckets) {
+  console.log(band.bucket, band.count); // high / medium / low
+}
+```
+
+> Note: `no_vat_exists` means the company was identified but legitimately has **no** VAT/UID
+> number (common for purely-domestic German firms). It is a definitive answer — not a failure —
+> and is not billed.
+
+---
+
+## 🇫🇷 E-Reporting / Compliance (DGFiP Flux 10)
+
+Full French e-reporting integration: enroll a company with the compliance provider, record and
+submit transactions (individually or via CSV import), and track the resulting DGFiP tax reports.
+All `compliance` routes require an active E-Reporting subscription / feature grant on your
+account — except `requestEReportingAccess()`, which is how you ask for one.
+
+### Request feature activation
+
+Not enabled yet? This route is deliberately **not** gated — it requests activation of the
+E-Reporting feature for your account (the authenticated user's name/email take precedence over
+the form values):
+
+```ts
+await client.eReporting.requestEReportingAccess({
+  company: 'Example GmbH',
+  phone: '+43 660 1234567',
+  message: 'Please activate e-reporting for our account.',
+  language: 'de', // locale of the confirmation mail
+});
+```
+
+### 1. SIRENE lookup (prefill enrollment data)
+
+Resolve company data by SIRET, SIREN or French VAT number via the French SIRENE registry.
+**Rate-limited to 3 requests/minute per user** (protects the external French government API).
+
+```ts
+const company = await client.eReporting.sireneLookup('FR32123456789'); // or a SIRET/SIREN
+
+console.log(company.companyName, company.siret);
+console.log(company.nafCode, company.enterpriseSize); // e.g. "47", "pme"
+```
+
+### 2. Create an enrollment
+
+Creates the local enrollment, provisions the provider account and (by default) activates the
+DGFiP regime. Either `siret` or `siren` is required. On provider failure the API responds 502
+(an `HttpException`) and the enrollment is persisted in an error state for retries.
+
+```ts
+const enrollment = await client.eReporting.createEnrollment({
+  siret: company.siret!, // or siren: company.siren
+  companyName: company.companyName,
+  address: company.address ?? undefined,
+  city: company.city ?? undefined,
+  postalcode: company.postalcode ?? undefined,
+  email: 'tax@acme.fr',
+  nafCode: company.nafCode!, // 2-digit NAF division, e.g. "47"
+  enterpriseSize: 'pme', // 'micro' | 'pme' | 'eti' | 'ge'
+  typeOperation: 'mixed', // 'services' | 'goods' | 'mixed'
+  reportingStartDate: '2026-09-01', // or a Date
+  autoActivate: true, // optional — false creates the account without regime activation
+});
+
+console.log(enrollment.id, enrollment.status, enrollment.statusLabel);
+
+const page = await client.eReporting.listEnrollments(1, 25); // paginated
+const single = await client.eReporting.getEnrollment(enrollment.id);
+```
+
+### 3. Record & submit transactions
+
+Records the transaction and (by default) submits it right away; pass `submitNow: false` to defer.
+Creation is **idempotent** on the invoice's natural key (enrollment, type, invoice number,
+invoice date, counterparty VAT) — a client retry returns the existing transaction instead of
+creating a duplicate.
+
+> **Note:** Immediate per-invoice submission (and `submitTransaction()`) requires the
+> **e-invoicing** feature on your account. In pure e-reporting mode transactions are only
+> recorded here and reported automatically via the aggregated daily ledgers —
+> `submitTransaction()` then returns a 422 `ValidationException` explaining this.
+
+```ts
+const tx = await client.eReporting.createTransaction({
+  complianceEnrollmentId: enrollment.id,
+  transactionType: 'b2c_outbound', // | 'b2b_domestic_outbound' | 'b2b_domestic_inbound'
+  //                                  | 'crossborder_outbound' | 'crossborder_inbound'
+  invoiceNumber: 'TKT-2026-00001',
+  invoiceDate: '2026-07-01', // or a Date
+  currency: 'EUR', // optional, default EUR
+  subtotal: 100,
+  taxAmount: 20,
+  total: 120,
+  invoiceLines: [
+    {
+      description: 'Ticket',
+      quantity: 1,
+      price: 100,
+      taxes: [{ name: 'TVA', percent: 20, category: 'S' }], // category E needs a VATEX `comment`
+    },
+  ],
+  submitNow: false, // record now, submit later
+});
+
+// Submit (or retry) a pending/error transaction later — replays the stored invoice lines
+const submitted = await client.eReporting.submitTransaction(tx.id);
+console.log(submitted.state, submitted.stateLabel); // e.g. "submitted"
+
+// Manage recorded transactions (only `pending` ones can be edited/deleted)
+const transactions = await client.eReporting.listTransactions({
+  dateFrom: '2026-07-01', // or a Date
+  dateTo: '2026-07-31',
+  state: 'pending', // 'pending' | 'sending' | 'submitted' | 'error'
+  transactionType: 'b2c_outbound',
+  page: 1,
+  perPage: 25,
+});
+const one = await client.eReporting.getTransaction(tx.id);
+await client.eReporting.updateTransaction(tx.id, { total: 130, taxAmount: 21.67 });
+await client.eReporting.deleteTransaction(tx.id); // resolves void on 204
+```
+
+### CSV import
+
+Bulk-import from a semicolon-separated CSV (one row per invoice line; rows sharing an
+`invoice_number` are grouped into one transaction). Idempotent: re-uploading skips rows whose
+invoice already exists.
+
+```ts
+import { readFileSync } from 'fs';
+
+const result = await client.eReporting.importTransactions(
+  enrollment.id,
+  readFileSync('transactions.csv', 'utf8'),
+  'transactions.csv', // optional filename
+);
+
+console.log(result.created, result.skippedDuplicates);
+for (const error of result.errors) console.warn(error); // row-level errors
+```
+
+### 4. Track tax reports
+
+Every submitted transaction is tracked through the aggregated DGFiP ledger lifecycle
+(`new → sent → acknowledged → registered` or `refused`/`error`).
+
+```ts
+const reports = await client.eReporting.listTaxReports(1, 25, 'refused'); // state filter optional
+for (const report of reports) {
+  console.log(report.state, report.stateLabel, report.isTerminal, report.refusalReason);
+}
+
+const report = await client.eReporting.getTaxReport(reports.rows[0]!.id);
+console.log(report.baseAmount, report.taxAmount, report.totalAmount); // precision-safe strings
+```
+
+### VAT rates & DGFiP tax categories
+
+The canonical rates for a reporting country (the seller's reporting-country rates). Use these to
+build the `taxes` entries of your invoice lines.
+
+```ts
+const rates = await client.eReporting.getVatRates('FR'); // defaults to FR when omitted
+
+for (const rate of rates.rates) {
+  console.log(rate.percent, rate.category, rate.taxName, rate.requiresVatex);
+  // 20 'S' 'TVA' false … 0 'E' 'TVA' true (VATEX code required in the line's comment)
+}
+```
+
+### Revenue statistics
+
+Read-only turnover aggregation over your e-reporting transactions — totals, a time series and
+breakdowns by transaction type, counterparty country and state. All headline figures are
+expressed in the most frequent currency in the range (`primaryCurrency`); when more than one
+currency is present, `isMultiCurrency` is `true` and `byCurrency` lists each one. Monetary values
+are returned as 4-decimal strings to preserve precision.
+
+```typescript
+const stats = await client.eReporting.getRevenueStatistics({
+  dateFrom: '2026-01-01', // optional — defaults to 12 months ago (server-side)
+  dateTo: new Date(), // optional — defaults to today
+  interval: 'month', // 'day' | 'week' | 'month' (default 'month')
+  transactionType: 'b2c_outbound', // optional filter
+  state: 'submitted', // optional filter
+});
+
+console.log(stats.primaryCurrency); // e.g. EUR
+console.log(stats.totals.total); // e.g. 120000.0000
+for (const bucket of stats.timeSeries) {
+  console.log(`${bucket.bucket}: ${bucket.total}`); // 2026-01: 10800.0000
+}
+for (const row of stats.byCountry) {
+  console.log(`${row.country} → ${row.total}`); // 'unknown' groups NULL partners
+}
+```
+
+---
+
 ## 📜 Certificates
 
 ### Single Certificate (PDF)

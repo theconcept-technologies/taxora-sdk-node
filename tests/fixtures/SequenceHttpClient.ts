@@ -31,6 +31,13 @@ export class SequenceHttpClient implements HttpClientInterface {
     });
   }
 
+  static textResponse(body: string, status = 200, contentType = 'text/plain'): Response {
+    return new Response(body, {
+      status,
+      headers: { 'Content-Type': contentType },
+    });
+  }
+
   static binaryResponse(data: Uint8Array, status = 200): Response {
     return new Response(data, {
       status,
