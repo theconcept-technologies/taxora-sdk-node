@@ -83,9 +83,7 @@ export class SmartEnrichmentResource {
       Array.isArray(verdicts)
         ? (verdicts.filter((v) => typeof v === 'object' && v !== null) as SmartEnrichmentProviderVerdict[])
         : [],
-      typeof quality === 'object' && quality !== null
-        ? (quality as SmartEnrichmentAddressQuality)
-        : undefined,
+      typeof quality === 'object' && quality !== null ? (quality as SmartEnrichmentAddressQuality) : undefined,
     );
   }
 

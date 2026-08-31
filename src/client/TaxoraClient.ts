@@ -48,7 +48,13 @@ export class TaxoraClient {
 
     this.vat = new VatEndpoint(this.baseUrl, options.apiKey, tokenStorage, retryClient, retryPolicy);
     this.company = new CompanyEndpoint(this.baseUrl, options.apiKey, tokenStorage, retryClient, retryPolicy);
-    this.smartEnrichment = new SmartEnrichmentEndpoint(this.baseUrl, options.apiKey, tokenStorage, retryClient, retryPolicy);
+    this.smartEnrichment = new SmartEnrichmentEndpoint(
+      this.baseUrl,
+      options.apiKey,
+      tokenStorage,
+      retryClient,
+      retryPolicy,
+    );
     this.eReporting = new EReportingEndpoint(this.baseUrl, options.apiKey, tokenStorage, retryClient, retryPolicy);
   }
 }

@@ -3,7 +3,9 @@ import { describeApiError, jsonErrorMessage, statusErrorMessage } from '../../sr
 
 describe('describeApiError', () => {
   it('uses the JSON message verbatim', () => {
-    expect(describeApiError('{"success":false,"message":"VAT number is unknown."}', 400)).toBe('VAT number is unknown.');
+    expect(describeApiError('{"success":false,"message":"VAT number is unknown."}', 400)).toBe(
+      'VAT number is unknown.',
+    );
   });
 
   it('uses the JSON error key', () => {

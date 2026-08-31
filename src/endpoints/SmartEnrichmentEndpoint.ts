@@ -320,7 +320,10 @@ export class SmartEnrichmentEndpoint {
     const responseText = await response.text();
 
     if (response.status === 422) {
-      throw new ValidationException(jsonErrorMessage(responseText) ?? 'Validation failed', this.parseValidationErrors(responseText));
+      throw new ValidationException(
+        jsonErrorMessage(responseText) ?? 'Validation failed',
+        this.parseValidationErrors(responseText),
+      );
     }
 
     if (!response.ok && !acceptedStatuses.includes(response.status)) {
@@ -361,7 +364,10 @@ export class SmartEnrichmentEndpoint {
     const responseText = await response.text();
 
     if (response.status === 422) {
-      throw new ValidationException(jsonErrorMessage(responseText) ?? 'Validation failed', this.parseValidationErrors(responseText));
+      throw new ValidationException(
+        jsonErrorMessage(responseText) ?? 'Validation failed',
+        this.parseValidationErrors(responseText),
+      );
     }
 
     if (!response.ok) {
@@ -396,7 +402,10 @@ export class SmartEnrichmentEndpoint {
     const responseText = await response.text();
 
     if (response.status === 422) {
-      throw new ValidationException(jsonErrorMessage(responseText) ?? 'Validation failed', this.parseValidationErrors(responseText));
+      throw new ValidationException(
+        jsonErrorMessage(responseText) ?? 'Validation failed',
+        this.parseValidationErrors(responseText),
+      );
     }
 
     if (!response.ok) {

@@ -143,9 +143,7 @@ describe('VatEndpoint.validate', () => {
   });
 
   it('fails immediately on a rate limit without Retry-After', async () => {
-    const { endpoint, client } = makeEndpoint([
-      SequenceHttpClient.jsonResponse({ message: 'Too Many Requests' }, 429),
-    ]);
+    const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ message: 'Too Many Requests' }, 429)]);
 
     const error = await endpoint.validate('ATU12345678').catch((e: unknown) => e);
 

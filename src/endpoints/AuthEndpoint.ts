@@ -58,12 +58,12 @@ export class AuthEndpoint {
 
       if (!response.ok) {
         throw new HttpException(
-        describeApiError(responseText, response.status),
-        response.status,
-        responseText,
-        {},
-        response.headers.get('retry-after'),
-      );
+          describeApiError(responseText, response.status),
+          response.status,
+          responseText,
+          {},
+          response.headers.get('retry-after'),
+        );
       }
 
       return this.parseResponse(responseText, response.status);
@@ -99,12 +99,12 @@ export class AuthEndpoint {
 
       if (!response.ok) {
         throw new HttpException(
-        describeApiError(responseText, response.status),
-        response.status,
-        responseText,
-        {},
-        response.headers.get('retry-after'),
-      );
+          describeApiError(responseText, response.status),
+          response.status,
+          responseText,
+          {},
+          response.headers.get('retry-after'),
+        );
       }
 
       return this.parseResponse(responseText, response.status);

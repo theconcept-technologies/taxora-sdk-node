@@ -680,7 +680,6 @@ describe('SmartEnrichmentEndpoint.statistics', () => {
   });
 });
 
-
 describe('SmartEnrichmentEndpoint search mode', () => {
   it('omits mode entirely when the caller does not pick one', async () => {
     const { endpoint, client } = makeEndpoint([processingResponse('job-no-mode')]);
@@ -712,7 +711,10 @@ describe('SmartEnrichmentEndpoint search mode', () => {
     const { endpoint, client } = makeEndpoint([processingResponse('job-bulk')]);
 
     await endpoint.bulkLookup(
-      [{ companyName: 'A GmbH', country: 'DE' }, { companyName: 'B GmbH', country: 'AT' }],
+      [
+        { companyName: 'A GmbH', country: 'DE' },
+        { companyName: 'B GmbH', country: 'AT' },
+      ],
       SmartEnrichmentMode.COMPLEX,
     );
 
@@ -745,8 +747,24 @@ describe('SmartEnrichmentEndpoint search mode', () => {
         source: 'ai_web:consensus',
         mode: 'complex',
         providerVerdicts: [
-          { provider: 'gemini', model: 'gemini-3.1-flash-lite', status: 'not_found', vatNumber: null, confidence: 0, grounded: true, sourceUrl: null },
-          { provider: 'perplexity', model: 'sonar-pro', status: 'found', vatNumber: 'DE811704788', confidence: 92, grounded: true, sourceUrl: 'https://example.test/impressum' },
+          {
+            provider: 'gemini',
+            model: 'gemini-3.1-flash-lite',
+            status: 'not_found',
+            vatNumber: null,
+            confidence: 0,
+            grounded: true,
+            sourceUrl: null,
+          },
+          {
+            provider: 'perplexity',
+            model: 'sonar-pro',
+            status: 'found',
+            vatNumber: 'DE811704788',
+            confidence: 92,
+            grounded: true,
+            sourceUrl: 'https://example.test/impressum',
+          },
         ],
         addressQuality: {
           providedPostalCode: '40547',

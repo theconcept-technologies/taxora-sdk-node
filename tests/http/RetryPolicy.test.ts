@@ -88,9 +88,9 @@ describe('RetryPolicy', () => {
     expect(policy.isRetryableError(Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }))).toBe(true);
     expect(policy.isRetryableError(new TypeError('fetch failed'))).toBe(true);
     expect(policy.isRetryableError(Object.assign(new Error('timeout'), { name: 'AbortError' }))).toBe(true);
-    expect(
-      policy.isRetryableError(new TypeError('Cannot read properties of undefined (reading "vat_uid")')),
-    ).toBe(false);
+    expect(policy.isRetryableError(new TypeError('Cannot read properties of undefined (reading "vat_uid")'))).toBe(
+      false,
+    );
     expect(policy.isRetryableError(new Error('boom'))).toBe(false);
 
     const off = new RetryPolicy({ retryOnNetworkErrors: false });

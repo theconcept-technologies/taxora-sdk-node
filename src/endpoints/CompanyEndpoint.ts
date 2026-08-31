@@ -33,12 +33,12 @@ export class CompanyEndpoint {
 
       if (!response.ok) {
         throw new HttpException(
-        describeApiError(responseText, response.status),
-        response.status,
-        responseText,
-        {},
-        response.headers.get('retry-after'),
-      );
+          describeApiError(responseText, response.status),
+          response.status,
+          responseText,
+          {},
+          response.headers.get('retry-after'),
+        );
       }
 
       let parsed: unknown;

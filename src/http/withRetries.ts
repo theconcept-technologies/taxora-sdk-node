@@ -10,11 +10,7 @@ import { type RetryPolicy } from './RetryPolicy.js';
  *
  * @param operation Short label used in the final error message, e.g. "VAT validation".
  */
-export async function withRetries<T>(
-  policy: RetryPolicy,
-  operation: string,
-  request: () => Promise<T>,
-): Promise<T> {
+export async function withRetries<T>(policy: RetryPolicy, operation: string, request: () => Promise<T>): Promise<T> {
   let attempt = 1;
 
   for (;;) {
@@ -79,13 +75,7 @@ export async function withResponseRetries(
     if (!policy.shouldRetry(response.status, attempt, retryAfter)) {
       if (attempt > 1 && policy.isRetryable(response.status, retryAfter)) {
         const body = await response.text();
-        const last = new HttpException(
-          describeApiError(body, response.status),
-          response.status,
-          body,
-          {},
-          retryAfter,
-        );
+        const last = new HttpException(describeApiError(body, response.status), response.status, body, {}, retryAfter);
 
         throw HttpException.afterAttempts(operation, attempt, last);
       }

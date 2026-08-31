@@ -34,8 +34,7 @@ export function toSmartEnrichmentMode(value: unknown): SmartEnrichmentMode | und
 }
 
 const DESCRIPTIONS: Record<SmartEnrichmentMode, string> = {
-  [SmartEnrichmentMode.DEFAULT]:
-    'One provider searches; a second is consulted only if it finds nothing.',
+  [SmartEnrichmentMode.DEFAULT]: 'One provider searches; a second is consulted only if it finds nothing.',
   [SmartEnrichmentMode.COMPLEX]:
     'Two providers search independently and are cross-checked against the tax authority. Costs more.',
 };
