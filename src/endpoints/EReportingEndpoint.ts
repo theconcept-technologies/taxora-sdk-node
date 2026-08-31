@@ -12,9 +12,12 @@ import { type ComplianceTaxReportState } from '../enums/ComplianceTaxReportState
 import { type ComplianceTransactionState } from '../enums/ComplianceTransactionState.js';
 import { type ComplianceTransactionType } from '../enums/ComplianceTransactionType.js';
 import { HttpException } from '../exceptions/HttpException.js';
+import { describeApiError } from '../exceptions/apiErrorMessage.js';
 import { TaxoraException } from '../exceptions/TaxoraException.js';
 import { ValidationException } from '../exceptions/ValidationException.js';
 import { type HttpClientInterface } from '../http/HttpClientInterface.js';
+import { RetryPolicy } from '../http/RetryPolicy.js';
+import { withResponseRetries } from '../http/withRetries.js';
 import { type TokenStorageInterface } from '../http/TokenStorageInterface.js';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -195,6 +198,7 @@ export class EReportingEndpoint {
     private readonly apiKey: string,
     private readonly tokenStorage: TokenStorageInterface,
     private readonly httpClient: HttpClientInterface,
+    private readonly retryPolicy: RetryPolicy = new RetryPolicy(),
   ) {}
 
   // ---------------------------------------------------------------------
@@ -662,7 +666,12 @@ export class EReportingEndpoint {
     const options: RequestInit = { headers: this.buildHeaders() };
     if (body) options.body = JSON.stringify(body);
 
-    return this.httpClient.request(method, url, options);
+    const send = (): Promise<Response> => this.httpClient.request(method, url, options);
+
+    // GETs are safe to repeat, so transient gateway failures are retried (see
+    // RetryPolicy). Writes are not: a gateway timeout does not tell us whether
+    // the API already processed them.
+    return method === 'GET' ? withResponseRetries(this.retryPolicy, 'e-reporting request', send) : send();
   }
 
   /** Multipart upload: Content-Type is left to fetch so the boundary is set correctly. */
@@ -679,18 +688,24 @@ export class EReportingEndpoint {
     }
 
     if (!response.ok) {
-      throw new HttpException(`HTTP error ${response.status}`, response.status, responseText);
+      throw new HttpException(
+        describeApiError(responseText, response.status),
+        response.status,
+        responseText,
+        {},
+        response.headers.get('retry-after'),
+      );
     }
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(responseText);
     } catch {
-      throw new HttpException('Invalid JSON response', 0, responseText);
+      throw new HttpException('Invalid JSON response', response.status, responseText);
     }
 
     if (typeof parsed !== 'object' || parsed === null) {
-      throw new HttpException('Unexpected response format', 0, responseText);
+      throw new HttpException('Unexpected response format', response.status, responseText);
     }
 
     const obj = parsed as Record<string, unknown>;
@@ -714,7 +729,13 @@ export class EReportingEndpoint {
     }
 
     if (!response.ok) {
-      throw new HttpException(`HTTP error ${response.status}`, response.status, responseText);
+      throw new HttpException(
+        describeApiError(responseText, response.status),
+        response.status,
+        responseText,
+        {},
+        response.headers.get('retry-after'),
+      );
     }
   }
 

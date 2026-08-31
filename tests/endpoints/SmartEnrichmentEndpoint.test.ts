@@ -8,6 +8,7 @@ import { SmartEnrichmentHistoryPage } from '../../src/dto/SmartEnrichmentHistory
 import { SmartEnrichmentStatistics } from '../../src/dto/SmartEnrichmentStatistics.js';
 import { type SmartEnrichmentStatisticsInterval } from '../../src/dto/SmartEnrichmentStatistics.js';
 import { SmartEnrichmentStatus } from '../../src/enums/SmartEnrichmentStatus.js';
+import { SmartEnrichmentMode } from '../../src/enums/SmartEnrichmentMode.js';
 import { HttpException } from '../../src/exceptions/HttpException.js';
 import { TaxoraException } from '../../src/exceptions/TaxoraException.js';
 import { ValidationException } from '../../src/exceptions/ValidationException.js';
@@ -676,5 +677,107 @@ describe('SmartEnrichmentEndpoint.statistics', () => {
     await expect(endpoint.statistics({ dateFrom: '2026-06-30', dateTo: '2026-01-01' })).rejects.toThrow(
       ValidationException,
     );
+  });
+});
+
+
+describe('SmartEnrichmentEndpoint search mode', () => {
+  it('omits mode entirely when the caller does not pick one', async () => {
+    const { endpoint, client } = makeEndpoint([processingResponse('job-no-mode')]);
+
+    await endpoint.lookup({ companyName: 'Example GmbH', country: 'DE' });
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    // The server default must stay the server's decision — sending an explicit 'default' would
+    // pin the SDK to today's default if that ever changes.
+    expect('mode' in body).toBe(false);
+  });
+
+  it('sends the requested mode on a single lookup', async () => {
+    const { endpoint, client } = makeEndpoint([processingResponse('job-complex')]);
+
+    await endpoint.lookup({
+      companyName: 'Vodafone D2 GmbH',
+      country: 'DE',
+      postalCode: '40547',
+      mode: SmartEnrichmentMode.COMPLEX,
+    });
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    expect(body.mode).toBe('complex');
+    expect(body.postalCode).toBe('40547');
+  });
+
+  it('sends a batch-level mode alongside the items', async () => {
+    const { endpoint, client } = makeEndpoint([processingResponse('job-bulk')]);
+
+    await endpoint.bulkLookup(
+      [{ companyName: 'A GmbH', country: 'DE' }, { companyName: 'B GmbH', country: 'AT' }],
+      SmartEnrichmentMode.COMPLEX,
+    );
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    expect(body.mode).toBe('complex');
+    expect(body.items).toHaveLength(2);
+  });
+
+  it('lets a per-row mode ride along for mixed batches', async () => {
+    const { endpoint, client } = makeEndpoint([processingResponse('job-mixed')]);
+
+    await endpoint.bulkLookup([
+      { companyName: 'Cheap GmbH', country: 'DE' },
+      { companyName: 'Hard GmbH', country: 'DE', mode: SmartEnrichmentMode.COMPLEX },
+    ]);
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    expect('mode' in body).toBe(false);
+    expect(body.items[1].mode).toBe('complex');
+  });
+
+  it('reads the mode and cross-check diagnostics back off a result', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        jobId: 'job-verdicts',
+        status: 'found',
+        vatNumber: 'DE811704788',
+        confidence: 92,
+        country: 'DE',
+        source: 'ai_web:consensus',
+        mode: 'complex',
+        providerVerdicts: [
+          { provider: 'gemini', model: 'gemini-3.1-flash-lite', status: 'not_found', vatNumber: null, confidence: 0, grounded: true, sourceUrl: null },
+          { provider: 'perplexity', model: 'sonar-pro', status: 'found', vatNumber: 'DE811704788', confidence: 92, grounded: true, sourceUrl: 'https://example.test/impressum' },
+        ],
+        addressQuality: {
+          providedPostalCode: '40547',
+          providedCity: null,
+          postalCodeFormatValid: true,
+          postalCodeAssigned: true,
+          postalCodeTrusted: true,
+          derivedPlace: 'Düsseldorf',
+          cityMatchesPostalCode: null,
+          warnings: ['city_derived_from_postal_code'],
+        },
+      }),
+    ]);
+
+    const job = await endpoint.lookup({ companyName: 'Vodafone D2 GmbH', country: 'DE' });
+    const result = job.result();
+
+    expect(result?.mode).toBe(SmartEnrichmentMode.COMPLEX);
+    expect(result?.providerVerdicts).toHaveLength(2);
+    expect(result?.providerVerdicts[1]?.provider).toBe('perplexity');
+    expect(result?.addressQuality?.derivedPlace).toBe('Düsseldorf');
+  });
+
+  it('leaves mode undefined when the API does not report one', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({ jobId: 'job-plain', status: 'not_found', country: 'DE' }),
+    ]);
+
+    const job = await endpoint.lookup({ companyName: 'Example GmbH', country: 'DE' });
+
+    expect(job.result()?.mode).toBeUndefined();
+    expect(job.result()?.providerVerdicts).toEqual([]);
   });
 });

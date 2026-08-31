@@ -3,7 +3,10 @@ import { Token } from '../dto/Token.js';
 import { LoginIdentifier } from '../enums/LoginIdentifier.js';
 import { AuthenticationException } from '../exceptions/AuthenticationException.js';
 import { HttpException } from '../exceptions/HttpException.js';
+import { describeApiError } from '../exceptions/apiErrorMessage.js';
 import { type HttpClientInterface } from '../http/HttpClientInterface.js';
+import { RetryPolicy } from '../http/RetryPolicy.js';
+import { withRetries } from '../http/withRetries.js';
 import { type TokenStorageInterface } from '../http/TokenStorageInterface.js';
 
 export class AuthEndpoint {
@@ -12,6 +15,7 @@ export class AuthEndpoint {
     private readonly apiKey: string,
     private readonly tokenStorage: TokenStorageInterface,
     private readonly httpClient: HttpClientInterface,
+    private readonly retryPolicy: RetryPolicy = new RetryPolicy(),
   ) {}
 
   async login(
@@ -34,28 +38,37 @@ export class AuthEndpoint {
       body['email'] = identifier;
     }
 
-    const response = await this.httpClient.request('POST', `${this.baseUrl}/auth/login`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.apiKey,
-      },
-      body: JSON.stringify(body),
+    const data = await withRetries(this.retryPolicy, 'login', async () => {
+      const response = await this.httpClient.request('POST', `${this.baseUrl}/auth/login`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.apiKey,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const responseText = await response.text();
+
+      if (response.status === 401) {
+        throw new AuthenticationException('Authentication failed: invalid credentials', {
+          status: 401,
+          body: responseText,
+        });
+      }
+
+      if (!response.ok) {
+        throw new HttpException(
+        describeApiError(responseText, response.status),
+        response.status,
+        responseText,
+        {},
+        response.headers.get('retry-after'),
+      );
+      }
+
+      return this.parseResponse(responseText, response.status);
     });
 
-    const responseText = await response.text();
-
-    if (response.status === 401) {
-      throw new AuthenticationException('Authentication failed: invalid credentials', {
-        status: 401,
-        body: responseText,
-      });
-    }
-
-    if (!response.ok) {
-      throw new HttpException(`HTTP error ${response.status}`, response.status, responseText);
-    }
-
-    const data = this.parseResponse(responseText);
     const token = Token.fromArray(data);
     this.tokenStorage.set(token);
     return token;
@@ -76,33 +89,42 @@ export class AuthEndpoint {
       headers['Authorization'] = `Bearer ${storedToken.accessToken}`;
     }
 
-    const response = await this.httpClient.request('POST', `${this.baseUrl}/auth/refresh`, { headers });
-    const responseText = await response.text();
+    const data = await withRetries(this.retryPolicy, 'token refresh', async () => {
+      const response = await this.httpClient.request('POST', `${this.baseUrl}/auth/refresh`, { headers });
+      const responseText = await response.text();
 
-    if (response.status === 401) {
-      throw new AuthenticationException('Token refresh failed: unauthorized', { status: 401, body: responseText });
-    }
+      if (response.status === 401) {
+        throw new AuthenticationException('Token refresh failed: unauthorized', { status: 401, body: responseText });
+      }
 
-    if (!response.ok) {
-      throw new HttpException(`HTTP error ${response.status}`, response.status, responseText);
-    }
+      if (!response.ok) {
+        throw new HttpException(
+        describeApiError(responseText, response.status),
+        response.status,
+        responseText,
+        {},
+        response.headers.get('retry-after'),
+      );
+      }
 
-    const data = this.parseResponse(responseText);
+      return this.parseResponse(responseText, response.status);
+    });
+
     const token = Token.fromArray(data);
     this.tokenStorage.set(token);
     return token;
   }
 
-  private parseResponse(responseText: string): Record<string, unknown> {
+  private parseResponse(responseText: string, statusCode: number): Record<string, unknown> {
     let parsed: unknown;
     try {
       parsed = JSON.parse(responseText);
     } catch {
-      throw new HttpException('Invalid JSON response', 0, responseText);
+      throw new HttpException('Invalid JSON response', statusCode, responseText);
     }
 
     if (typeof parsed !== 'object' || parsed === null) {
-      throw new HttpException('Unexpected response format', 0, responseText);
+      throw new HttpException('Unexpected response format', statusCode, responseText);
     }
 
     const obj = parsed as Record<string, unknown>;

@@ -6,11 +6,15 @@ interface RecordedRequest {
   options?: RequestInit;
 }
 
+/**
+ * An entry may also be an Error, which is thrown instead of returned — that is
+ * how a transport failure (connection reset, client timeout) is simulated.
+ */
 export class SequenceHttpClient implements HttpClientInterface {
   public requests: RecordedRequest[] = [];
-  private responses: Response[];
+  private responses: (Response | Error)[];
 
-  constructor(responses: Response[]) {
+  constructor(responses: (Response | Error)[]) {
     this.responses = [...responses];
   }
 
@@ -21,7 +25,15 @@ export class SequenceHttpClient implements HttpClientInterface {
     if (!response) {
       throw new Error('SequenceHttpClient: no more responses available');
     }
+    if (response instanceof Error) {
+      throw response;
+    }
     return response;
+  }
+
+  /** Stands in for what fetch throws on a reset connection or client-side timeout. */
+  static networkError(message = 'fetch failed'): Error {
+    return new TypeError(message);
   }
 
   static jsonResponse(body: unknown, status = 200): Response {

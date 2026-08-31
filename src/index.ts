@@ -46,6 +46,10 @@ export { VatResource } from './dto/VatResource.js';
 export { VatCollection } from './dto/VatCollection.js';
 export { VatCertificateExport } from './dto/VatCertificateExport.js';
 export { SmartEnrichmentResource } from './dto/SmartEnrichmentResource.js';
+export type {
+  SmartEnrichmentProviderVerdict,
+  SmartEnrichmentAddressQuality,
+} from './dto/SmartEnrichmentResource.js';
 export { SmartEnrichmentJob } from './dto/SmartEnrichmentJob.js';
 export { SmartEnrichmentHistoryRow } from './dto/SmartEnrichmentHistoryRow.js';
 export type { SmartEnrichmentHistoryInput } from './dto/SmartEnrichmentHistoryRow.js';
@@ -94,6 +98,11 @@ export {
   describeSmartEnrichmentStatus,
 } from './enums/SmartEnrichmentStatus.js';
 export {
+  SmartEnrichmentMode,
+  toSmartEnrichmentMode,
+  describeSmartEnrichmentMode,
+} from './enums/SmartEnrichmentMode.js';
+export {
   ComplianceEnrollmentStatus,
   toComplianceEnrollmentStatus,
   describeComplianceEnrollmentStatus,
@@ -119,6 +128,10 @@ export { TaxoraException } from './exceptions/TaxoraException.js';
 export { AuthenticationException } from './exceptions/AuthenticationException.js';
 export { HttpException } from './exceptions/HttpException.js';
 export { ValidationException } from './exceptions/ValidationException.js';
+export { describeApiError } from './exceptions/apiErrorMessage.js';
+
+// Retries
+export { RetryPolicy, type RetryPolicyOptions } from './http/RetryPolicy.js';
 
 // HTTP
 export type { TokenStorageInterface } from './http/TokenStorageInterface.js';

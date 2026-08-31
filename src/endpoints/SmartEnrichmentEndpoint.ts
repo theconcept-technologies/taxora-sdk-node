@@ -1,11 +1,15 @@
+import { type SmartEnrichmentMode } from '../enums/SmartEnrichmentMode.js';
 import { SmartEnrichmentJob } from '../dto/SmartEnrichmentJob.js';
 import { SmartEnrichmentHistoryPage } from '../dto/SmartEnrichmentHistoryPage.js';
 import { SmartEnrichmentStatistics, type SmartEnrichmentStatisticsInterval } from '../dto/SmartEnrichmentStatistics.js';
 import { type SmartEnrichmentStatus } from '../enums/SmartEnrichmentStatus.js';
 import { HttpException } from '../exceptions/HttpException.js';
+import { describeApiError, jsonErrorMessage } from '../exceptions/apiErrorMessage.js';
 import { TaxoraException } from '../exceptions/TaxoraException.js';
 import { ValidationException } from '../exceptions/ValidationException.js';
 import { type HttpClientInterface } from '../http/HttpClientInterface.js';
+import { RetryPolicy } from '../http/RetryPolicy.js';
+import { withResponseRetries } from '../http/withRetries.js';
 import { type TokenStorageInterface } from '../http/TokenStorageInterface.js';
 
 const STATISTICS_INTERVALS: readonly SmartEnrichmentStatisticsInterval[] = ['day', 'week', 'month'];
@@ -19,6 +23,11 @@ export interface SmartEnrichmentInput {
   street?: string;
   postalCode?: string;
   city?: string;
+  /**
+   * Search depth. Omit to use the server default (`default`). `complex` searches with two
+   * independent providers and cross-checks them — better hit rate, higher cost per lookup.
+   */
+  mode?: SmartEnrichmentMode;
 }
 
 /** One recent monthly billing entry, exposed on the usage response for transparency. */
@@ -88,6 +97,7 @@ export class SmartEnrichmentEndpoint {
     private readonly apiKey: string,
     private readonly tokenStorage: TokenStorageInterface,
     private readonly httpClient: HttpClientInterface,
+    private readonly retryPolicy: RetryPolicy = new RetryPolicy(),
   ) {}
 
   /**
@@ -105,6 +115,7 @@ export class SmartEnrichmentEndpoint {
     if (input.street !== undefined) body['street'] = input.street;
     if (input.postalCode !== undefined) body['postalCode'] = input.postalCode;
     if (input.city !== undefined) body['city'] = input.city;
+    if (input.mode !== undefined) body['mode'] = input.mode;
 
     const response = await this.sendRequest('POST', `${this.baseUrl}/smart-enrichment`, body);
     const data = await this.parseJsonResponse(response, [200, 202]);
@@ -114,14 +125,20 @@ export class SmartEnrichmentEndpoint {
   /**
    * Bulk batch — always async. Returns a `processing` job; results arrive via the
    * `enrichment.completed` webhook and are retrievable via get(job.jobId).
+   *
+   * @param mode Search depth for every row in the batch. A row carrying its own `mode` overrides
+   *             it, so a caller can pay for `complex` on just the rows that need it.
    */
-  async bulkLookup(items: SmartEnrichmentInput[]): Promise<SmartEnrichmentJob> {
+  async bulkLookup(items: SmartEnrichmentInput[], mode?: SmartEnrichmentMode): Promise<SmartEnrichmentJob> {
     if (items.length === 0) {
       throw new TaxoraException('bulkLookup requires at least one item.');
     }
     items.forEach((item, index) => this.validateInput(item, `items[${index}]`));
 
-    const response = await this.sendRequest('POST', `${this.baseUrl}/smart-enrichment/bulk`, { items });
+    const body: Record<string, unknown> = { items };
+    if (mode !== undefined) body['mode'] = mode;
+
+    const response = await this.sendRequest('POST', `${this.baseUrl}/smart-enrichment/bulk`, body);
     const data = await this.parseJsonResponse(response, [200, 202]);
     return SmartEnrichmentJob.fromArray(data);
   }
@@ -288,7 +305,12 @@ export class SmartEnrichmentEndpoint {
     const options: RequestInit = { headers: this.buildHeaders() };
     if (body) options.body = JSON.stringify(body);
 
-    return this.httpClient.request(method, url, options);
+    const send = (): Promise<Response> => this.httpClient.request(method, url, options);
+
+    // GETs are safe to repeat, so transient gateway failures are retried (see
+    // RetryPolicy). Writes are not: a gateway timeout does not tell us whether
+    // the API already processed them.
+    return method === 'GET' ? withResponseRetries(this.retryPolicy, 'Smart Enrichment request', send) : send();
   }
 
   private async parseJsonResponse(
@@ -298,22 +320,28 @@ export class SmartEnrichmentEndpoint {
     const responseText = await response.text();
 
     if (response.status === 422) {
-      throw new ValidationException('Validation failed', this.parseValidationErrors(responseText));
+      throw new ValidationException(jsonErrorMessage(responseText) ?? 'Validation failed', this.parseValidationErrors(responseText));
     }
 
     if (!response.ok && !acceptedStatuses.includes(response.status)) {
-      throw new HttpException(`HTTP error ${response.status}`, response.status, responseText);
+      throw new HttpException(
+        describeApiError(responseText, response.status),
+        response.status,
+        responseText,
+        {},
+        response.headers.get('retry-after'),
+      );
     }
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(responseText);
     } catch {
-      throw new HttpException('Invalid JSON response', 0, responseText);
+      throw new HttpException('Invalid JSON response', response.status, responseText);
     }
 
     if (typeof parsed !== 'object' || parsed === null) {
-      throw new HttpException('Unexpected response format', 0, responseText);
+      throw new HttpException('Unexpected response format', response.status, responseText);
     }
 
     const obj = parsed as Record<string, unknown>;
@@ -333,22 +361,28 @@ export class SmartEnrichmentEndpoint {
     const responseText = await response.text();
 
     if (response.status === 422) {
-      throw new ValidationException('Validation failed', this.parseValidationErrors(responseText));
+      throw new ValidationException(jsonErrorMessage(responseText) ?? 'Validation failed', this.parseValidationErrors(responseText));
     }
 
     if (!response.ok) {
-      throw new HttpException(`HTTP error ${response.status}`, response.status, responseText);
+      throw new HttpException(
+        describeApiError(responseText, response.status),
+        response.status,
+        responseText,
+        {},
+        response.headers.get('retry-after'),
+      );
     }
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(responseText);
     } catch {
-      throw new HttpException('Invalid JSON response', 0, responseText);
+      throw new HttpException('Invalid JSON response', response.status, responseText);
     }
 
     if (typeof parsed !== 'object' || parsed === null) {
-      throw new HttpException('Unexpected response format', 0, responseText);
+      throw new HttpException('Unexpected response format', response.status, responseText);
     }
 
     return parsed as Record<string, unknown>;
@@ -362,11 +396,17 @@ export class SmartEnrichmentEndpoint {
     const responseText = await response.text();
 
     if (response.status === 422) {
-      throw new ValidationException('Validation failed', this.parseValidationErrors(responseText));
+      throw new ValidationException(jsonErrorMessage(responseText) ?? 'Validation failed', this.parseValidationErrors(responseText));
     }
 
     if (!response.ok) {
-      throw new HttpException(`HTTP error ${response.status}`, response.status, responseText);
+      throw new HttpException(
+        describeApiError(responseText, response.status),
+        response.status,
+        responseText,
+        {},
+        response.headers.get('retry-after'),
+      );
     }
 
     return responseText;

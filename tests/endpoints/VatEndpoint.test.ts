@@ -10,6 +10,7 @@ import { VatValidationAddressInput } from '../../src/dto/VatValidationAddressInp
 import { Language } from '../../src/enums/Language.js';
 import { HttpException } from '../../src/exceptions/HttpException.js';
 import { ValidationException } from '../../src/exceptions/ValidationException.js';
+import { RetryPolicy } from '../../src/http/RetryPolicy.js';
 
 const BASE_URL = 'https://sandbox.taxora.io/v1';
 const API_KEY = 'test-api-key';
@@ -29,12 +30,13 @@ const VAT_RESPONSE = {
   },
 };
 
-function makeEndpoint(responses: Response[]) {
+function makeEndpoint(responses: (Response | Error)[], retryPolicy?: RetryPolicy) {
   const storage = new InMemoryTokenStorage();
   const token = new Token('test-token', 'Bearer', new Date(Date.now() + 3600_000));
   storage.set(token);
   const client = new SequenceHttpClient(responses);
-  const endpoint = new VatEndpoint(BASE_URL, API_KEY, storage, client);
+  // No waiting between attempts: the backoff itself is covered in RetryPolicy.test.ts.
+  const endpoint = new VatEndpoint(BASE_URL, API_KEY, storage, client, retryPolicy ?? RetryPolicy.withoutDelay());
   return { endpoint, storage, client };
 }
 
@@ -96,7 +98,7 @@ describe('VatEndpoint.validate', () => {
     expect(body.address_input).toBeDefined();
   });
 
-  it('retries once on 504 and returns VatResource on success', async () => {
+  it('retries on 504 and returns VatResource on success', async () => {
     const { endpoint, client } = makeEndpoint([
       SequenceHttpClient.jsonResponse({ message: 'Gateway Timeout' }, 504),
       SequenceHttpClient.jsonResponse(VAT_RESPONSE),
@@ -107,13 +109,184 @@ describe('VatEndpoint.validate', () => {
     expect(client.requests).toHaveLength(2);
   });
 
-  it('throws HttpException with clean message after second 504', async () => {
-    const { endpoint } = makeEndpoint([
+  it('throws HttpException with clean message after exhausting retries', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({ message: 'Gateway Timeout' }, 504),
       SequenceHttpClient.jsonResponse({ message: 'Gateway Timeout' }, 504),
       SequenceHttpClient.jsonResponse({ message: 'Gateway Timeout' }, 504),
     ]);
 
     await expect(endpoint.validate('ATU12345678')).rejects.toThrow(HttpException);
+    expect(client.requests).toHaveLength(3);
+  });
+
+  it('retries a rate limit only when the API says how long to wait', async () => {
+    const slept: number[] = [];
+    const policy = new RetryPolicy({ sleeper: (ms) => void slept.push(ms) });
+
+    const { endpoint, client } = makeEndpoint(
+      [
+        new Response(JSON.stringify({ message: 'Too Many Requests' }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/json', 'Retry-After': '2' },
+        }),
+        SequenceHttpClient.jsonResponse(VAT_RESPONSE),
+      ],
+      policy,
+    );
+
+    const result = await endpoint.validate('ATU12345678');
+
+    expect(result).toBeInstanceOf(VatResource);
+    expect(client.requests).toHaveLength(2);
+    expect(slept).toEqual([2000]);
+  });
+
+  it('fails immediately on a rate limit without Retry-After', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({ message: 'Too Many Requests' }, 429),
+    ]);
+
+    const error = await endpoint.validate('ATU12345678').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).getStatusCode()).toBe(429);
+    expect((error as HttpException).message).toBe('Too Many Requests');
+    expect(client.requests).toHaveLength(1);
+  });
+
+  it('fails immediately when Retry-After is longer than the cap', async () => {
+    const { endpoint, client } = makeEndpoint([
+      new Response('<html><body>504</body></html>', {
+        status: 504,
+        headers: { 'Content-Type': 'text/html', 'Retry-After': '120' },
+      }),
+    ]);
+
+    const error = await endpoint.validate('ATU12345678').catch((e: unknown) => e);
+
+    expect((error as HttpException).getRetryAfter()).toBe('120');
+    expect(client.requests).toHaveLength(1);
+  });
+
+  it('retries a transport failure and rethrows it unchanged when the attempts run out', async () => {
+    const recovered = makeEndpoint([SequenceHttpClient.networkError(), SequenceHttpClient.jsonResponse(VAT_RESPONSE)]);
+
+    expect(await recovered.endpoint.validate('ATU12345678')).toBeInstanceOf(VatResource);
+    expect(recovered.client.requests).toHaveLength(2);
+
+    const exhausted = makeEndpoint([
+      SequenceHttpClient.networkError(),
+      SequenceHttpClient.networkError(),
+      SequenceHttpClient.networkError(),
+    ]);
+
+    const error = await exhausted.endpoint.validate('ATU12345678').catch((e: unknown) => e);
+
+    // Callers keep seeing their own HTTP client's error.
+    expect(error).toBeInstanceOf(TypeError);
+    expect((error as Error).message).toBe('fetch failed');
+    expect(exhausted.client.requests).toHaveLength(3);
+  });
+
+  it('can turn retrying off completely', async () => {
+    // Callers that do their own retrying (queue workers, cron jobs) opt out with
+    // RetryPolicy.disabled() and get the failure on the first attempt.
+    const { endpoint, client } = makeEndpoint(
+      [SequenceHttpClient.textResponse('<html><body>504</body></html>', 504, 'text/html')],
+      RetryPolicy.disabled(),
+    );
+
+    const error = await endpoint.validate('ATU12345678').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).message).toBe('Taxora API request failed (HTTP 504 Gateway Timeout).');
+    expect(client.requests).toHaveLength(1);
+  });
+
+  it('honours a custom attempt count', async () => {
+    const { endpoint, client } = makeEndpoint(
+      [
+        SequenceHttpClient.textResponse('<html><body>504</body></html>', 504, 'text/html'),
+        SequenceHttpClient.textResponse('<html><body>504</body></html>', 504, 'text/html'),
+      ],
+      RetryPolicy.withoutDelay(2),
+    );
+
+    const error = await endpoint.validate('ATU12345678').catch((e: unknown) => e);
+
+    expect((error as HttpException).message).toBe(
+      'Taxora VAT validation failed after 2 attempts (HTTP 504 Gateway Timeout).',
+    );
+    expect(client.requests).toHaveLength(2);
+  });
+
+  it('retries 502 and 503 as well and waits between attempts', async () => {
+    const slept: number[] = [];
+    const policy = new RetryPolicy({ sleeper: (ms) => void slept.push(ms) });
+
+    const { endpoint, client } = makeEndpoint(
+      [
+        SequenceHttpClient.textResponse('<html><body>bad gateway</body></html>', 502, 'text/html'),
+        SequenceHttpClient.textResponse('<html><body>unavailable</body></html>', 503, 'text/html'),
+        SequenceHttpClient.jsonResponse(VAT_RESPONSE),
+      ],
+      policy,
+    );
+
+    const result = await endpoint.validate('ATU12345678');
+
+    expect(result).toBeInstanceOf(VatResource);
+    expect(client.requests).toHaveLength(3);
+    expect(slept).toEqual([500, 1000]);
+  });
+
+  it('does not retry a certificate export, which would duplicate the job', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.textResponse('<html><body>504</body></html>', 504, 'text/html'),
+    ]);
+
+    const error = await endpoint.certificatesBulkExport('2024-01-01', '2024-01-31').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).message).toBe('Taxora API request failed (HTTP 504 Gateway Timeout).');
+    expect(client.requests).toHaveLength(1);
+  });
+
+  it('never puts a gateway HTML error page into the message', async () => {
+    const html = [
+      '<!DOCTYPE html>',
+      '<html><head><meta name="robots" content="noindex"></head>',
+      '<body><p class="code">Error code: 504</p>',
+      '<p>App Platform failed to forward this request to the application.</p></body></html>',
+    ].join('\n');
+
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.textResponse(html, 504, 'text/html'),
+      SequenceHttpClient.textResponse(html, 504, 'text/html'),
+      SequenceHttpClient.textResponse(html, 504, 'text/html'),
+    ]);
+
+    const error = await endpoint.validate('ATU12345678').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).message).toBe(
+      'Taxora VAT validation failed after 3 attempts (HTTP 504 Gateway Timeout).',
+    );
+    expect((error as HttpException).message).not.toContain('<');
+    // The raw page stays available for debugging.
+    expect((error as HttpException).getResponseBody()).toBe(html);
+  });
+
+  it('surfaces a JSON API message instead of the raw body', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({ success: false, message: 'VAT number is unknown to the provider.' }, 400),
+    ]);
+
+    const error = await endpoint.validate('ATU12345678').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).message).toBe('VAT number is unknown to the provider.');
   });
 
   it('does not retry on non-504 errors', async () => {

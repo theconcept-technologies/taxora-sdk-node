@@ -4,9 +4,12 @@ import { VatCertificateExport } from '../dto/VatCertificateExport.js';
 import { VatValidationAddressInput } from '../dto/VatValidationAddressInput.js';
 import { type Language } from '../enums/Language.js';
 import { HttpException } from '../exceptions/HttpException.js';
+import { describeApiError, jsonErrorMessage } from '../exceptions/apiErrorMessage.js';
 import { ValidationException } from '../exceptions/ValidationException.js';
 import { TaxoraException } from '../exceptions/TaxoraException.js';
 import { type HttpClientInterface } from '../http/HttpClientInterface.js';
+import { RetryPolicy } from '../http/RetryPolicy.js';
+import { withRetries } from '../http/withRetries.js';
 import { type TokenStorageInterface } from '../http/TokenStorageInterface.js';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -17,6 +20,7 @@ export class VatEndpoint {
     private readonly apiKey: string,
     private readonly tokenStorage: TokenStorageInterface,
     private readonly httpClient: HttpClientInterface,
+    private readonly retryPolicy: RetryPolicy = new RetryPolicy(),
   ) {}
 
   async validate(
@@ -33,22 +37,13 @@ export class VatEndpoint {
       body['address_input'] = addressInput instanceof VatValidationAddressInput ? addressInput.toArray() : addressInput;
     }
 
-    return this.validateWithGatewayRetry(body, 2);
-  }
+    // Read-only lookup, so transient gateway failures are retried (see RetryPolicy).
+    return withRetries(this.retryPolicy, 'VAT validation', async () => {
+      const response = await this.sendRequest('POST', `${this.baseUrl}/vat/validate`, body);
+      const data = await this.parseJsonResponse(response);
 
-  private async validateWithGatewayRetry(body: Record<string, unknown>, attemptsLeft: number): Promise<VatResource> {
-    const response = await this.sendRequest('POST', `${this.baseUrl}/vat/validate`, body);
-
-    if (response.status === 504) {
-      if (attemptsLeft <= 1) {
-        const text = await response.text();
-        throw new HttpException('VAT validation timed out after multiple attempts', 504, text);
-      }
-      return this.validateWithGatewayRetry(body, attemptsLeft - 1);
-    }
-
-    const data = await this.parseJsonResponse(response);
-    return VatResource.fromArray(data);
+      return VatResource.fromArray(data);
+    });
   }
 
   async validateMultiple(vatUids: string[], companyNames?: string[], provider?: string): Promise<VatCollection> {
@@ -56,31 +51,42 @@ export class VatEndpoint {
     if (companyNames) body['company_names'] = companyNames;
     if (provider) body['source'] = provider;
 
-    const response = await this.sendRequest('POST', `${this.baseUrl}/vat/validate/multiple`, body);
-    const data = await this.parseJsonResponse(response);
+    return withRetries(this.retryPolicy, 'VAT validation', async () => {
+      const response = await this.sendRequest('POST', `${this.baseUrl}/vat/validate/multiple`, body);
+      const data = await this.parseJsonResponse(response);
 
-    return VatCollection.fromResponse(data);
+      return VatCollection.fromResponse(data);
+    });
   }
 
   async validateSchema(vatUid: string): Promise<Record<string, unknown>> {
     const body: Record<string, unknown> = { vat_uid: vatUid };
-    const response = await this.sendRequest('POST', `${this.baseUrl}/vat/validate/schema`, body);
-    return this.parseJsonResponse(response);
+    return withRetries(this.retryPolicy, 'VAT schema check', async () => {
+      const response = await this.sendRequest('POST', `${this.baseUrl}/vat/validate/schema`, body);
+
+      return this.parseJsonResponse(response);
+    });
   }
 
   async state(vatUid: string): Promise<VatResource> {
-    const response = await this.sendRequest('GET', `${this.baseUrl}/vat/state/${encodeURIComponent(vatUid)}`);
-    const data = await this.parseJsonResponse(response);
-    return VatResource.fromArray(data);
+    return withRetries(this.retryPolicy, 'VAT state lookup', async () => {
+      const response = await this.sendRequest('GET', `${this.baseUrl}/vat/state/${encodeURIComponent(vatUid)}`);
+      const data = await this.parseJsonResponse(response);
+
+      return VatResource.fromArray(data);
+    });
   }
 
   async history(vatUid?: string): Promise<VatCollection> {
     let url = `${this.baseUrl}/vat/history`;
     if (vatUid) url += `?vat_uid=${encodeURIComponent(vatUid)}`;
 
-    const response = await this.sendRequest('GET', url);
-    const data = await this.parseJsonResponse(response);
-    return VatCollection.fromResponse(data);
+    return withRetries(this.retryPolicy, 'VAT history request', async () => {
+      const response = await this.sendRequest('GET', url);
+      const data = await this.parseJsonResponse(response);
+
+      return VatCollection.fromResponse(data);
+    });
   }
 
   async search(term?: string, perPage?: number): Promise<VatCollection> {
@@ -91,18 +97,24 @@ export class VatEndpoint {
     const queryString = params.toString();
     const url = `${this.baseUrl}/vat/search${queryString ? `?${queryString}` : ''}`;
 
-    const response = await this.sendRequest('GET', url);
-    const data = await this.parseJsonResponse(response);
-    return VatCollection.fromResponse(data);
+    return withRetries(this.retryPolicy, 'VAT search', async () => {
+      const response = await this.sendRequest('GET', url);
+      const data = await this.parseJsonResponse(response);
+
+      return VatCollection.fromResponse(data);
+    });
   }
 
   async certificate(uuid: string, lang?: Language): Promise<Uint8Array> {
     let url = `${this.baseUrl}/vat/certificate/${encodeURIComponent(uuid)}`;
     if (lang) url += `?lang=${lang}`;
 
-    const response = await this.sendBinaryRequest('GET', url);
-    const buffer = await response.arrayBuffer();
-    return new Uint8Array(buffer);
+    return withRetries(this.retryPolicy, 'VAT certificate download', async () => {
+      const response = await this.sendBinaryRequest('GET', url);
+      const buffer = await response.arrayBuffer();
+
+      return new Uint8Array(buffer);
+    });
   }
 
   async certificatesBulkExport(
@@ -150,9 +162,13 @@ export class VatEndpoint {
 
   async downloadBulkExport(exportId: string): Promise<Uint8Array> {
     const url = `${this.baseUrl}/vat/certificates/bulk-export/${encodeURIComponent(exportId)}/download`;
-    const response = await this.sendBinaryRequest('GET', url);
-    const buffer = await response.arrayBuffer();
-    return new Uint8Array(buffer);
+
+    return withRetries(this.retryPolicy, 'VAT export download', async () => {
+      const response = await this.sendBinaryRequest('GET', url);
+      const buffer = await response.arrayBuffer();
+
+      return new Uint8Array(buffer);
+    });
   }
 
   private buildHeaders(): Record<string, string> {
@@ -181,7 +197,13 @@ export class VatEndpoint {
     const response = await this.httpClient.request(method, url, { headers });
     if (!response.ok) {
       const text = await response.text();
-      throw new HttpException(`HTTP error ${response.status}`, response.status, text);
+      throw new HttpException(
+        describeApiError(text, response.status),
+        response.status,
+        text,
+        {},
+        response.headers.get('retry-after'),
+      );
     }
     return response;
   }
@@ -202,22 +224,28 @@ export class VatEndpoint {
       } catch {
         // ignore parse errors
       }
-      throw new ValidationException('Validation failed', errors);
+      throw new ValidationException(jsonErrorMessage(responseText) ?? 'Validation failed', errors);
     }
 
     if (!response.ok && !acceptedStatuses.includes(response.status)) {
-      throw new HttpException(`HTTP error ${response.status}`, response.status, responseText);
+      throw new HttpException(
+        describeApiError(responseText, response.status),
+        response.status,
+        responseText,
+        {},
+        response.headers.get('retry-after'),
+      );
     }
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(responseText);
     } catch {
-      throw new HttpException('Invalid JSON response', 0, responseText);
+      throw new HttpException('Invalid JSON response', response.status, responseText);
     }
 
     if (typeof parsed !== 'object' || parsed === null) {
-      throw new HttpException('Unexpected response format', 0, responseText);
+      throw new HttpException('Unexpected response format', response.status, responseText);
     }
 
     const obj = parsed as Record<string, unknown>;
