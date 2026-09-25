@@ -5,9 +5,12 @@ import {
   type ComplianceEnterpriseSize,
   type CreateComplianceEnrollmentInput,
   type CreateComplianceTransactionInput,
+  type NorwayEnrollmentInput,
+  type ComplianceRequestService,
   type EReportingInterval,
 } from '../../src/endpoints/EReportingEndpoint.js';
 import { InMemoryTokenStorage } from '../../src/http/InMemoryTokenStorage.js';
+import { RetryPolicy } from '../../src/http/RetryPolicy.js';
 import { Token } from '../../src/dto/Token.js';
 import { SequenceHttpClient } from '../fixtures/SequenceHttpClient.js';
 import { ComplianceEnrollment } from '../../src/dto/ComplianceEnrollment.js';
@@ -20,6 +23,11 @@ import { ImportResult } from '../../src/dto/ImportResult.js';
 import { RevenueStatistics } from '../../src/dto/RevenueStatistics.js';
 import { SireneLookupResult } from '../../src/dto/SireneLookupResult.js';
 import { VatRates } from '../../src/dto/VatRates.js';
+import { PeppolLookupResult } from '../../src/dto/PeppolLookupResult.js';
+import { RegistryCompany } from '../../src/dto/RegistryCompany.js';
+import { ComplianceDocumentType } from '../../src/enums/ComplianceDocumentType.js';
+import { ComplianceService } from '../../src/enums/ComplianceService.js';
+import { PeppolLookupStatus } from '../../src/enums/PeppolLookupStatus.js';
 import { ComplianceEnrollmentStatus } from '../../src/enums/ComplianceEnrollmentStatus.js';
 import { ComplianceTaxReportState } from '../../src/enums/ComplianceTaxReportState.js';
 import { ComplianceTransactionState } from '../../src/enums/ComplianceTransactionState.js';
@@ -1182,5 +1190,592 @@ describe('EReportingEndpoint.requestEReportingAccess', () => {
     const error = await endpoint.requestEReportingAccess().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(HttpException);
     expect((error as HttpException).getStatusCode()).toBe(400);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-country services / Norway e-invoicing (EHF / Peppol BIS 3.0)
+// ---------------------------------------------------------------------------
+
+const NORWAY_ENROLLMENT_PAYLOAD = {
+  ...ENROLLMENT_PAYLOAD,
+  id: 13,
+  country: 'no',
+  regime: 'peppol_bis3',
+  service: 'e_invoicing',
+  tax_id: 'NO923609016MVA',
+  company_register_id: '923609016',
+  company_register_scheme: '0192',
+  regime_config: { vat_registered: true, enterprise_register: true, reception: false },
+  reporting_start_date: null,
+};
+
+const NORWAY_TRANSACTION_PAYLOAD = {
+  ...TRANSACTION_PAYLOAD,
+  id: 100,
+  compliance_enrollment_id: 13,
+  country: 'no',
+  regime: 'peppol_bis3',
+  transaction_type: 'b2b_domestic_outbound',
+  currency: 'NOK',
+  counterparty_name: 'EQUINOR ASA',
+  counterparty_country: 'NO',
+  counterparty_register_id: '923609016',
+  counterparty_address: 'Forusbeen 50',
+  counterparty_city: 'STAVANGER',
+  counterparty_postalcode: '4035',
+  counterparty_email: 'ap@equinor.example',
+  buyer_reference: 'PO-4711',
+  document_type: 'credit_note',
+  amended_number: 'NO-2026-0001',
+  amended_date: '2026-09-01',
+  provider_state: 'accepted',
+  provider_payload: {
+    invoice: {
+      invoice_lines_attributes: [
+        {
+          description: 'Consulting',
+          quantity: 2,
+          price: 1000,
+          taxes_attributes: [{ name: 'MVA', percent: 25, category: 'S' }],
+        },
+      ],
+    },
+  },
+  tax_report: null,
+};
+
+function validNorwayEnrollmentInput(): NorwayEnrollmentInput {
+  return {
+    orgNumber: 'NO 923 609 016 MVA',
+    companyName: 'Acme AS',
+    address: 'Karl Johans gate 1',
+    city: 'Oslo',
+    postalcode: '0154',
+    email: 'faktura@acme.no',
+  };
+}
+
+function norwayTransactionInput(): CreateComplianceTransactionInput {
+  return {
+    complianceEnrollmentId: 13,
+    transactionType: 'b2b_domestic_outbound',
+    invoiceNumber: 'NO-2026-0002',
+    invoiceDate: '2026-09-20',
+    currency: 'NOK',
+    subtotal: 2000,
+    taxAmount: 500,
+    total: 2500,
+    counterpartyName: 'EQUINOR ASA',
+    counterpartyCountry: 'NO',
+    counterpartyRegisterId: '923609016',
+    invoiceLines: [
+      { description: 'Consulting', quantity: 2, price: 1000, taxes: [{ name: 'MVA', percent: 25, category: 'S' }] },
+    ],
+  };
+}
+
+describe('EReportingEndpoint Norway enrollment', () => {
+  it('createNorwayEnrollment POSTs the Norway body with the org number normalized', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(NORWAY_ENROLLMENT_PAYLOAD, 201)]);
+
+    const enrollment = await endpoint.createNorwayEnrollment({
+      ...validNorwayEnrollmentInput(),
+      service: 'e_invoicing',
+      regime: 'peppol_bis3',
+      vatNumber: 'NO923609016MVA',
+      province: 'Oslo',
+      vatRegistered: true,
+      enterpriseRegister: true,
+      reception: false,
+      legalCountry: 'no',
+      reportingStartDate: new Date('2026-10-01T00:00:00'),
+      autoActivate: false,
+    });
+
+    const req = client.requests[0]!;
+    expect(req.method).toBe('POST');
+    expect(req.url).toBe(`${BASE_URL}/compliance/enrollments`);
+    expect(JSON.parse(req.options?.body as string)).toEqual({
+      country: 'NO',
+      org_number: '923609016',
+      company_name: 'Acme AS',
+      address: 'Karl Johans gate 1',
+      city: 'Oslo',
+      postalcode: '0154',
+      email: 'faktura@acme.no',
+      service: 'e_invoicing',
+      regime: 'peppol_bis3',
+      vat_number: 'NO923609016MVA',
+      province: 'Oslo',
+      vat_registered: true,
+      enterprise_register: true,
+      reception: false,
+      legal_country: 'NO',
+      reporting_start_date: '2026-10-01',
+      auto_activate: false,
+    });
+
+    expect(enrollment).toBeInstanceOf(ComplianceEnrollment);
+    expect(enrollment.service).toBe(ComplianceService.E_INVOICING);
+    expect(enrollment.regime).toBe('peppol_bis3');
+    expect(enrollment.companyRegisterScheme).toBe('0192');
+  });
+
+  it('createEnrollment routes a country "NO" input to the Norway body and omits unset optionals', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(NORWAY_ENROLLMENT_PAYLOAD, 201)]);
+
+    await endpoint.createEnrollment({ ...validNorwayEnrollmentInput(), country: 'NO' });
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    expect(body).toEqual({
+      country: 'NO',
+      org_number: '923609016',
+      company_name: 'Acme AS',
+      address: 'Karl Johans gate 1',
+      city: 'Oslo',
+      postalcode: '0154',
+      email: 'faktura@acme.no',
+    });
+    expect(body).not.toHaveProperty('naf_code');
+  });
+
+  it('rejects an invalid org number before sending', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(
+      endpoint.createNorwayEnrollment({ ...validNorwayEnrollmentInput(), orgNumber: '923609017' }),
+    ).rejects.toThrow('orgNumber must be a valid 9-digit Norwegian organisation number (mod-11 check digit).');
+    await expect(
+      endpoint.createNorwayEnrollment({ ...validNorwayEnrollmentInput(), orgNumber: undefined as unknown as string }),
+    ).rejects.toThrow(TaxoraException);
+    expect(client.requests).toHaveLength(0);
+  });
+
+  it('rejects missing Norway fields, bad email, service and legalCountry before sending', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(
+      endpoint.createNorwayEnrollment({ ...validNorwayEnrollmentInput(), companyName: ' ' }),
+    ).rejects.toThrow('companyName is required for a Norway enrollment.');
+    await expect(
+      endpoint.createNorwayEnrollment({ ...validNorwayEnrollmentInput(), city: undefined as unknown as string }),
+    ).rejects.toThrow('city is required for a Norway enrollment.');
+    await expect(endpoint.createNorwayEnrollment({ ...validNorwayEnrollmentInput(), email: 'nope' })).rejects.toThrow(
+      'email must be a valid email address.',
+    );
+    await expect(
+      endpoint.createNorwayEnrollment({
+        ...validNorwayEnrollmentInput(),
+        service: 'e_magic' as ComplianceRequestService,
+      }),
+    ).rejects.toThrow('Invalid service "e_magic". Expected one of: e_reporting, e_invoicing.');
+    await expect(
+      endpoint.createNorwayEnrollment({ ...validNorwayEnrollmentInput(), legalCountry: 'NOR' }),
+    ).rejects.toThrow('legalCountry must be a 2-character ISO 3166-1 alpha-2 code.');
+    expect(client.requests).toHaveLength(0);
+  });
+
+  it('keeps France enrollments backwards compatible and passes an optional service', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(ENROLLMENT_PAYLOAD, 201), envelope(ENROLLMENT_PAYLOAD, 201)]);
+
+    await endpoint.createEnrollment(validEnrollmentInput());
+    await endpoint.createEnrollment({ ...validEnrollmentInput(), country: 'FR', service: 'e_reporting' });
+
+    const first = JSON.parse(client.requests[0]!.options?.body as string);
+    expect(first).not.toHaveProperty('service');
+    expect(first).not.toHaveProperty('org_number');
+    const second = JSON.parse(client.requests[1]!.options?.body as string);
+    expect(second.service).toBe('e_reporting');
+    expect(second.country).toBe('FR');
+
+    await expect(
+      endpoint.createEnrollment({ ...validEnrollmentInput(), service: 'x' as ComplianceRequestService }),
+    ).rejects.toThrow('Invalid service "x".');
+  });
+
+  it('surfaces a 403 service_not_active as HttpException with the code in the body', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse(
+        {
+          success: false,
+          message: 'E-invoicing is not active for your account.',
+          code: 'service_not_active',
+          service: 'e_invoicing',
+        },
+        403,
+      ),
+    ]);
+
+    const error = await endpoint.createNorwayEnrollment(validNorwayEnrollmentInput()).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).getStatusCode()).toBe(403);
+    expect((error as HttpException).message).toBe('E-invoicing is not active for your account.');
+    expect(JSON.parse((error as HttpException).getResponseBody()).code).toBe('service_not_active');
+  });
+
+  it('parses the service on list and falls back to unknown when missing', async () => {
+    const { endpoint } = makeEndpoint([pageEnvelope([NORWAY_ENROLLMENT_PAYLOAD, ENROLLMENT_PAYLOAD], {})]);
+
+    const page = await endpoint.listEnrollments();
+
+    expect(page.rows[0]!.service).toBe(ComplianceService.E_INVOICING);
+    expect(page.rows[1]!.service).toBe(ComplianceService.UNKNOWN);
+  });
+});
+
+describe('EReportingEndpoint.registryLookup', () => {
+  const REGISTRY_ROW = {
+    org_number: '923609016',
+    company_name: 'EQUINOR ASA',
+    organisation_form: 'ASA',
+    vat_registered: true,
+    vat_number: 'NO923609016MVA',
+    enterprise_register: true,
+    bankrupt: false,
+    under_liquidation: false,
+    address: 'Forusbeen 50',
+    postalcode: '4035',
+    city: 'STAVANGER',
+    country: 'NO',
+  };
+
+  it('GETs /compliance/registry-lookup and maps the results', async () => {
+    const { endpoint, client } = makeEndpoint([envelope({ results: [REGISTRY_ROW, 'garbage'] })]);
+
+    const results = await endpoint.registryLookup('no', ' NO923609016MVA ');
+
+    const req = client.requests[0]!;
+    expect(req.method).toBe('GET');
+    const url = new URL(req.url);
+    expect(url.pathname).toBe('/v1/compliance/registry-lookup');
+    expect(url.searchParams.get('country')).toBe('NO');
+    expect(url.searchParams.get('q')).toBe('NO923609016MVA');
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toBeInstanceOf(RegistryCompany);
+    expect(results[0]!.companyName).toBe('EQUINOR ASA');
+    expect(results[0]!.vatNumber).toBe('NO923609016MVA');
+    expect(results[0]!.enterpriseRegister).toBe(true);
+  });
+
+  it('searches by name and tolerates a missing results array', async () => {
+    const { endpoint, client } = makeEndpoint([envelope({ other: true })]);
+
+    await expect(endpoint.registryLookup('NO', 'Equinor & Co')).resolves.toEqual([]);
+    expect(new URL(client.requests[0]!.url).searchParams.get('q')).toBe('Equinor & Co');
+  });
+
+  it('throws TaxoraException without a request on empty q, bad country or invalid org number', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(endpoint.registryLookup('NO', '  ')).rejects.toThrow('q must not be empty.');
+    await expect(endpoint.registryLookup('NOR', 'Equinor')).rejects.toThrow(
+      'country must be a 2-character ISO 3166-1 alpha-2 code.',
+    );
+    await expect(endpoint.registryLookup('NO', '923609017')).rejects.toThrow(
+      'Invalid Norwegian organisation number "923609017" (check digit).',
+    );
+    expect(client.requests).toHaveLength(0);
+  });
+
+  it('throws HttpException on 404 / 429 and ValidationException on 422', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({ success: false, message: 'No company found for "x".' }, 404),
+      SequenceHttpClient.jsonResponse({ message: 'Too Many Attempts.' }, 429),
+      SequenceHttpClient.jsonResponse({ success: false, error: 'Registry lookup is available for: NO.' }, 422),
+    ]);
+
+    const notFound = await endpoint.registryLookup('NO', 'x').catch((e: unknown) => e);
+    expect((notFound as HttpException).getStatusCode()).toBe(404);
+    const limited = await endpoint.registryLookup('NO', 'x').catch((e: unknown) => e);
+    expect((limited as HttpException).getStatusCode()).toBe(429);
+    const invalid = await endpoint.registryLookup('SE', 'x').catch((e: unknown) => e);
+    expect(invalid).toBeInstanceOf(ValidationException);
+    expect((invalid as ValidationException).message).toBe('Registry lookup is available for: NO.');
+  });
+});
+
+describe('EReportingEndpoint.peppolLookup', () => {
+  const PEPPOL_PAYLOAD = {
+    status: 'reachable',
+    reachable: true,
+    country: 'NO',
+    scheme: '0192',
+    id: '923609016',
+    document_types: ['xml.ubl.invoice.bis3', 'xml.ubl.credit_note.bis3'],
+    transport_type_code: 'peppol',
+    checked_at: '2026-09-25T10:00:00+00:00',
+  };
+
+  it('GETs /compliance/peppol-lookup with the normalized org number', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(PEPPOL_PAYLOAD)]);
+
+    const result = await endpoint.peppolLookup('no', 'NO 923 609 016 MVA');
+
+    const url = new URL(client.requests[0]!.url);
+    expect(client.requests[0]!.method).toBe('GET');
+    expect(url.pathname).toBe('/v1/compliance/peppol-lookup');
+    expect(url.searchParams.get('country')).toBe('NO');
+    expect(url.searchParams.get('id')).toBe('923609016');
+    expect(url.searchParams.has('scheme')).toBe(false);
+
+    expect(result).toBeInstanceOf(PeppolLookupResult);
+    expect(result.status).toBe(PeppolLookupStatus.REACHABLE);
+    expect(result.reachable).toBe(true);
+    expect(result.documentTypes).toEqual(['xml.ubl.invoice.bis3', 'xml.ubl.credit_note.bis3']);
+    expect(result.transportTypeCode).toBe('peppol');
+  });
+
+  it('maps a pending result and passes an explicit scheme', async () => {
+    const { endpoint, client } = makeEndpoint([
+      envelope({
+        ...PEPPOL_PAYLOAD,
+        status: 'pending',
+        reachable: null,
+        document_types: [],
+        transport_type_code: null,
+      }),
+    ]);
+
+    const result = await endpoint.peppolLookup('NO', '923609016', '0192');
+
+    expect(new URL(client.requests[0]!.url).searchParams.get('scheme')).toBe('0192');
+    expect(result.status).toBe(PeppolLookupStatus.PENDING);
+    expect(result.isPending).toBe(true);
+    expect(result.reachable).toBeNull();
+  });
+
+  it('does not org-number-check ids under another scheme', async () => {
+    const { endpoint, client } = makeEndpoint([
+      envelope({ ...PEPPOL_PAYLOAD, status: 'not_reachable', reachable: false, scheme: '0088', id: '7300010000001' }),
+    ]);
+
+    const result = await endpoint.peppolLookup('NO', '7300010000001', '0088');
+
+    expect(new URL(client.requests[0]!.url).searchParams.get('id')).toBe('7300010000001');
+    expect(result.status).toBe(PeppolLookupStatus.NOT_REACHABLE);
+    expect(result.reachable).toBe(false);
+  });
+
+  it('throws TaxoraException without a request on invalid input', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(endpoint.peppolLookup('NO', '923609017')).rejects.toThrow(
+      'Invalid Norwegian organisation number "923609017".',
+    );
+    await expect(endpoint.peppolLookup('NO', ' ')).rejects.toThrow('id must not be empty.');
+    await expect(endpoint.peppolLookup('NO', '923609016', '192')).rejects.toThrow(
+      'scheme must be a 4-digit Peppol identifier scheme, e.g. "0192".',
+    );
+    await expect(endpoint.peppolLookup('', '923609016')).rejects.toThrow(
+      'country must be a 2-character ISO 3166-1 alpha-2 code.',
+    );
+    expect(client.requests).toHaveLength(0);
+  });
+
+  it('retries a 502 provider error (GET) and then throws HttpException', async () => {
+    const storage = new InMemoryTokenStorage();
+    storage.set(new Token('test-token', 'Bearer', new Date(Date.now() + 3600_000)));
+    const failure = () => SequenceHttpClient.jsonResponse({ success: false, error: 'Provider error: timeout' }, 502);
+    const client = new SequenceHttpClient([failure(), failure()]);
+    const endpoint = new EReportingEndpoint(
+      BASE_URL,
+      API_KEY,
+      storage,
+      client,
+      new RetryPolicy({ maxAttempts: 2, sleeper: () => undefined }),
+    );
+
+    const error = await endpoint.peppolLookup('NO', '923609016').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).getStatusCode()).toBe(502);
+    expect(client.requests).toHaveLength(2);
+  });
+});
+
+describe('EReportingEndpoint Norway transactions', () => {
+  it('POSTs the buyer/document fields as snake_case and parses the e-invoicing response fields', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(NORWAY_TRANSACTION_PAYLOAD, 201)]);
+
+    const tx = await endpoint.createTransaction({
+      ...norwayTransactionInput(),
+      counterpartyAddress: 'Forusbeen 50',
+      counterpartyCity: 'STAVANGER',
+      counterpartyPostalcode: '4035',
+      counterpartyEmail: 'ap@equinor.example',
+      buyerReference: 'PO-4711',
+      isCreditNote: true,
+      amendedNumber: 'NO-2026-0001',
+      amendedDate: new Date('2026-09-01T00:00:00'),
+      extraInfo: 'Credit for returned goods',
+    });
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    expect(body).toMatchObject({
+      compliance_enrollment_id: 13,
+      transaction_type: 'b2b_domestic_outbound',
+      currency: 'NOK',
+      counterparty_name: 'EQUINOR ASA',
+      counterparty_country: 'NO',
+      counterparty_register_id: '923609016',
+      counterparty_address: 'Forusbeen 50',
+      counterparty_city: 'STAVANGER',
+      counterparty_postalcode: '4035',
+      counterparty_email: 'ap@equinor.example',
+      buyer_reference: 'PO-4711',
+      is_credit_note: true,
+      amended_number: 'NO-2026-0001',
+      amended_date: '2026-09-01',
+      extra_info: 'Credit for returned goods',
+    });
+
+    expect(tx.counterpartyRegisterId).toBe('923609016');
+    expect(tx.counterpartyAddress).toBe('Forusbeen 50');
+    expect(tx.counterpartyCity).toBe('STAVANGER');
+    expect(tx.counterpartyPostalcode).toBe('4035');
+    expect(tx.counterpartyEmail).toBe('ap@equinor.example');
+    expect(tx.buyerReference).toBe('PO-4711');
+    expect(tx.documentType).toBe(ComplianceDocumentType.CREDIT_NOTE);
+    expect(tx.isCreditNote).toBe(true);
+    expect(tx.amendedNumber).toBe('NO-2026-0001');
+    expect(tx.amendedDate).toBe('2026-09-01');
+    expect(tx.providerState).toBe('accepted');
+    expect(tx.invoiceLines).toHaveLength(1);
+    expect(tx.invoiceLines[0]!.price).toBe('1000');
+    expect(tx.invoiceLines[0]!.taxes[0]!.name).toBe('MVA');
+  });
+
+  it('omits unset buyer fields (France bodies unchanged)', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(TRANSACTION_PAYLOAD, 201)]);
+
+    const tx = await endpoint.createTransaction(validTransactionInput());
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    for (const key of ['counterparty_register_id', 'buyer_reference', 'is_credit_note', 'amended_date', 'extra_info']) {
+      expect(body).not.toHaveProperty(key);
+    }
+    expect(tx.documentType).toBe(ComplianceDocumentType.INVOICE);
+    expect(tx.providerState).toBeNull();
+  });
+
+  it('PUTs the buyer fields on update', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(NORWAY_TRANSACTION_PAYLOAD)]);
+
+    await endpoint.updateTransaction(100, { counterpartyRegisterId: '974760673', buyerReference: 'PO-1' });
+
+    expect(client.requests[0]!.method).toBe('PUT');
+    expect(JSON.parse(client.requests[0]!.options?.body as string)).toEqual({
+      counterparty_register_id: '974760673',
+      buyer_reference: 'PO-1',
+    });
+  });
+
+  it('throws TaxoraException without a request on invalid buyer fields', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(
+      endpoint.createTransaction({ ...norwayTransactionInput(), counterpartyRegisterId: '923609017' }),
+    ).rejects.toThrow('counterpartyRegisterId must be a valid 9-digit Norwegian organisation number');
+    await expect(
+      endpoint.createTransaction({ ...norwayTransactionInput(), counterpartyRegisterId: 'x'.repeat(31) }),
+    ).rejects.toThrow('counterpartyRegisterId must not exceed 30 characters.');
+    await expect(
+      endpoint.createTransaction({ ...norwayTransactionInput(), counterpartyEmail: 'nope' }),
+    ).rejects.toThrow('counterpartyEmail must be a valid email address.');
+    await expect(
+      endpoint.createTransaction({ ...norwayTransactionInput(), buyerReference: 'x'.repeat(101) }),
+    ).rejects.toThrow('buyerReference must not exceed 100 characters.');
+    await expect(
+      endpoint.createTransaction({ ...norwayTransactionInput(), amendedNumber: 'x'.repeat(51) }),
+    ).rejects.toThrow('amendedNumber must not exceed 50 characters.');
+    await expect(
+      endpoint.createTransaction({ ...norwayTransactionInput(), extraInfo: 'x'.repeat(1001) }),
+    ).rejects.toThrow('extraInfo must not exceed 1000 characters.');
+    await expect(
+      endpoint.createTransaction({ ...norwayTransactionInput(), isCreditNote: true, amendedDate: '01.09.2026' }),
+    ).rejects.toThrow('Invalid date format: "01.09.2026". Expected YYYY-MM-DD.');
+    await expect(endpoint.updateTransaction(100, { counterpartyEmail: '' })).rejects.toThrow(
+      'counterpartyEmail must be a valid email address.',
+    );
+    expect(client.requests).toHaveLength(0);
+  });
+
+  it('does not check-digit validate a register id of a non-Norwegian buyer', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(TRANSACTION_PAYLOAD, 201)]);
+
+    await endpoint.createTransaction({ ...validTransactionInput(), counterpartyRegisterId: '12345678900012' });
+
+    expect(JSON.parse(client.requests[0]!.options?.body as string).counterparty_register_id).toBe('12345678900012');
+  });
+
+  it('surfaces the backend Norway rules (422) as ValidationException', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse(
+        {
+          message: "The buyer's Norwegian organisation number is required for e-invoicing in Norway.",
+          errors: {
+            counterparty_register_id: [
+              "The buyer's Norwegian organisation number is required for e-invoicing in Norway.",
+            ],
+          },
+        },
+        422,
+      ),
+    ]);
+
+    const error = await endpoint
+      .createTransaction({ ...norwayTransactionInput(), counterpartyRegisterId: undefined })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ValidationException);
+    expect((error as ValidationException).getErrors()).toHaveProperty('counterparty_register_id');
+  });
+
+  it('listTransactions serializes the enrollment and country filters', async () => {
+    const { endpoint, client } = makeEndpoint([pageEnvelope([NORWAY_TRANSACTION_PAYLOAD], {})]);
+
+    const page = await endpoint.listTransactions({ complianceEnrollmentId: 13, country: 'no', perPage: 50 });
+
+    expect(client.requests[0]!.url).toBe(
+      `${BASE_URL}/compliance/transactions?compliance_enrollment_id=13&country=NO&per_page=50`,
+    );
+    expect(page.rows[0]!.providerState).toBe('accepted');
+  });
+
+  it('listTransactions rejects an invalid enrollment id or country without a request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(endpoint.listTransactions({ complianceEnrollmentId: 0 })).rejects.toThrow(
+      'complianceEnrollmentId must be a positive integer.',
+    );
+    await expect(endpoint.listTransactions({ country: 'NOR' })).rejects.toThrow(
+      'country must be a 2-character ISO 3166-1 alpha-2 code.',
+    );
+    expect(client.requests).toHaveLength(0);
+  });
+});
+
+describe('EReportingEndpoint.requestEReportingAccess (per-country services)', () => {
+  it('sends service and upper-cased countries', async () => {
+    const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true })]);
+
+    await endpoint.requestEReportingAccess({ service: 'e_invoicing', countries: ['no', 'FR'] });
+
+    expect(JSON.parse(client.requests[0]!.options?.body as string)).toEqual({
+      service: 'e_invoicing',
+      countries: ['NO', 'FR'],
+    });
+  });
+
+  it('rejects an invalid service or country without a request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(endpoint.requestEReportingAccess({ service: 'e_magic' as ComplianceRequestService })).rejects.toThrow(
+      'Invalid service "e_magic".',
+    );
+    await expect(endpoint.requestEReportingAccess({ countries: ['NO', 'NOR'] })).rejects.toThrow(
+      'countries[1] must be a 2-character ISO 3166-1 alpha-2 code.',
+    );
+    expect(client.requests).toHaveLength(0);
   });
 });

@@ -25,7 +25,11 @@ export type {
   ComplianceTransactionRequestType,
   ComplianceTransactionRequestState,
   ComplianceTaxReportRequestState,
+  ComplianceRequestService,
   CreateComplianceEnrollmentInput,
+  CreateNorwayEnrollmentInput,
+  NorwayEnrollmentInput,
+  ComplianceTransactionBuyerInput,
   CreateComplianceTransactionInput,
   UpdateComplianceTransactionInput,
   ComplianceInvoiceLineInput,
@@ -74,10 +78,16 @@ export type {
 export { ComplianceEnrollment } from './dto/ComplianceEnrollment.js';
 export { ComplianceEnrollmentPage } from './dto/ComplianceEnrollmentPage.js';
 export { ComplianceTransaction } from './dto/ComplianceTransaction.js';
+export type {
+  ComplianceTransactionInvoiceLine,
+  ComplianceTransactionInvoiceLineTax,
+} from './dto/ComplianceTransaction.js';
 export { ComplianceTransactionPage } from './dto/ComplianceTransactionPage.js';
 export { ComplianceTaxReport } from './dto/ComplianceTaxReport.js';
 export { ComplianceTaxReportPage } from './dto/ComplianceTaxReportPage.js';
 export { SireneLookupResult } from './dto/SireneLookupResult.js';
+export { RegistryCompany } from './dto/RegistryCompany.js';
+export { PeppolLookupResult } from './dto/PeppolLookupResult.js';
 export { VatRates } from './dto/VatRates.js';
 export type { VatRate } from './dto/VatRates.js';
 export { ImportResult } from './dto/ImportResult.js';
@@ -119,6 +129,16 @@ export {
   toComplianceTaxReportState,
   describeComplianceTaxReportState,
 } from './enums/ComplianceTaxReportState.js';
+export { ComplianceService, toComplianceService, describeComplianceService } from './enums/ComplianceService.js';
+export {
+  ComplianceDocumentType,
+  toComplianceDocumentType,
+  describeComplianceDocumentType,
+} from './enums/ComplianceDocumentType.js';
+export { PeppolLookupStatus, toPeppolLookupStatus, describePeppolLookupStatus } from './enums/PeppolLookupStatus.js';
+
+// Helpers
+export { NorwegianOrgNumber } from './support/NorwegianOrgNumber.js';
 
 // Exceptions
 export { TaxoraException } from './exceptions/TaxoraException.js';

@@ -24,6 +24,21 @@ import {
   toComplianceTaxReportState,
   describeComplianceTaxReportState,
 } from '../../src/enums/ComplianceTaxReportState.js';
+import {
+  ComplianceService,
+  toComplianceService,
+  describeComplianceService,
+} from '../../src/enums/ComplianceService.js';
+import {
+  PeppolLookupStatus,
+  toPeppolLookupStatus,
+  describePeppolLookupStatus,
+} from '../../src/enums/PeppolLookupStatus.js';
+import {
+  ComplianceDocumentType,
+  toComplianceDocumentType,
+  describeComplianceDocumentType,
+} from '../../src/enums/ComplianceDocumentType.js';
 
 describe('Environment', () => {
   it('has SANDBOX and PRODUCTION values', () => {
@@ -179,6 +194,63 @@ describe('ComplianceTaxReportState', () => {
   it('describeComplianceTaxReportState returns a description for every value', () => {
     for (const state of Object.values(ComplianceTaxReportState)) {
       expect(describeComplianceTaxReportState(state).length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('ComplianceService', () => {
+  it('has all backend values', () => {
+    expect(Object.values(ComplianceService)).toEqual(['e_reporting', 'e_invoicing', 'unknown']);
+  });
+
+  it('toComplianceService coerces tolerantly', () => {
+    expect(toComplianceService('e_invoicing')).toBe(ComplianceService.E_INVOICING);
+    expect(toComplianceService(' E_Reporting ')).toBe(ComplianceService.E_REPORTING);
+    expect(toComplianceService('e_magic')).toBe(ComplianceService.UNKNOWN);
+    expect(toComplianceService(null)).toBe(ComplianceService.UNKNOWN);
+  });
+
+  it('describeComplianceService returns a description for every value', () => {
+    for (const service of Object.values(ComplianceService)) {
+      expect(describeComplianceService(service).length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('PeppolLookupStatus', () => {
+  it('has all backend values', () => {
+    expect(Object.values(PeppolLookupStatus)).toEqual(['reachable', 'not_reachable', 'pending', 'unknown']);
+  });
+
+  it('toPeppolLookupStatus coerces tolerantly', () => {
+    expect(toPeppolLookupStatus('not_reachable')).toBe(PeppolLookupStatus.NOT_REACHABLE);
+    expect(toPeppolLookupStatus(' Pending ')).toBe(PeppolLookupStatus.PENDING);
+    expect(toPeppolLookupStatus('maybe')).toBe(PeppolLookupStatus.UNKNOWN);
+    expect(toPeppolLookupStatus(1)).toBe(PeppolLookupStatus.UNKNOWN);
+  });
+
+  it('describePeppolLookupStatus returns a description for every value', () => {
+    for (const status of Object.values(PeppolLookupStatus)) {
+      expect(describePeppolLookupStatus(status).length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('ComplianceDocumentType', () => {
+  it('has all backend values', () => {
+    expect(Object.values(ComplianceDocumentType)).toEqual(['invoice', 'credit_note', 'unknown']);
+  });
+
+  it('toComplianceDocumentType coerces tolerantly', () => {
+    expect(toComplianceDocumentType('credit_note')).toBe(ComplianceDocumentType.CREDIT_NOTE);
+    expect(toComplianceDocumentType(' Invoice ')).toBe(ComplianceDocumentType.INVOICE);
+    expect(toComplianceDocumentType('receipt')).toBe(ComplianceDocumentType.UNKNOWN);
+    expect(toComplianceDocumentType(undefined)).toBe(ComplianceDocumentType.UNKNOWN);
+  });
+
+  it('describeComplianceDocumentType returns a description for every value', () => {
+    for (const type of Object.values(ComplianceDocumentType)) {
+      expect(describeComplianceDocumentType(type).length).toBeGreaterThan(0);
     }
   });
 });

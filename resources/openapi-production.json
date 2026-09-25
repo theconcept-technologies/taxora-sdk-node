@@ -1036,8 +1036,8 @@
                 "tags": [
                     "Compliance"
                 ],
-                "summary": "Create a compliance enrollment and provision the provider account",
-                "description": "Creates the local enrollment, then the B2Brouter account, then (by default) activates the DGFiP tax report setting. On provider failure the local enrollment is persisted in `error_account`/`error_activation` state for retries.",
+                "summary": "Enroll a country (e-reporting or e-invoicing) and provision the provider account",
+                "description": "Books one service for one country. Creates the local enrollment, then the B2Brouter account, then (by default) activates the country regime: the DGFiP tax report setting for France, the Peppol registration for Norway (EHF). Required fields depend on `country`: France needs siret/siren + DGFiP data, Norway needs org_number, company_name, address, city, postalcode. The company must have the matching service unlocked (403 `service_not_active` otherwise). Countries with a setup fee are billed once when the regime is activated. On provider failure the local enrollment is persisted in `error_account`/`error_activation` state for retries.",
                 "operationId": "30232ed599e4168744843cd3c6d6eef3",
                 "requestBody": {
                     "required": true,
@@ -1045,13 +1045,45 @@
                         "application/json": {
                             "schema": {
                                 "required": [
-                                    "email",
-                                    "naf_code",
-                                    "enterprise_size",
-                                    "type_operation",
-                                    "reporting_start_date"
+                                    "email"
                                 ],
                                 "properties": {
+                                    "country": {
+                                        "type": "string",
+                                        "default": "FR",
+                                        "enum": [
+                                            "FR",
+                                            "NO"
+                                        ]
+                                    },
+                                    "service": {
+                                        "description": "Defaults to e_reporting where available (FR), otherwise the country's only service (NO: e_invoicing)",
+                                        "type": "string",
+                                        "enum": [
+                                            "e_reporting",
+                                            "e_invoicing"
+                                        ]
+                                    },
+                                    "org_number": {
+                                        "description": "NO only: 9-digit Norwegian organisation number (also the Peppol id, scheme 0192)",
+                                        "type": "string",
+                                        "example": "923609016"
+                                    },
+                                    "vat_registered": {
+                                        "description": "NO only: registered in the Norwegian VAT register (MVA)",
+                                        "type": "boolean",
+                                        "default": true
+                                    },
+                                    "enterprise_register": {
+                                        "description": "NO only: registered in Foretaksregisteret — adds the mandatory 'Foretaksregisteret' note to invoices",
+                                        "type": "boolean",
+                                        "default": false
+                                    },
+                                    "reception": {
+                                        "description": "NO only: also register to RECEIVE e-invoices over Peppol",
+                                        "type": "boolean",
+                                        "default": false
+                                    },
                                     "siret": {
                                         "description": "14-digit SIRET — required if siren missing",
                                         "type": "string",
@@ -1147,6 +1179,9 @@
                                 }
                             }
                         }
+                    },
+                    "403": {
+                        "description": "The requested service is not active for this company (code service_not_active)"
                     },
                     "422": {
                         "description": "Validation failed"
@@ -1276,6 +1311,251 @@
                     },
                     "429": {
                         "description": "Rate limit exceeded (3 requests/minute)"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/compliance/registry-lookup": {
+            "get": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Look up a company in the national register (Norway: Brønnøysund Enhetsregisteret)",
+                "description": "Resolves a Norwegian organisation number (or 'NO…MVA' VAT number) — or searches by name — in the official register. Returns the company name, address, whether it is VAT-registered (MVA) and registered in Foretaksregisteret. Rate-limited to 30 requests per minute per user.",
+                "operationId": "9dc5d9c50177e7f146b8e6c0f652a403",
+                "parameters": [
+                    {
+                        "name": "country",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "NO"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "description": "Organisation number, NO…MVA VAT number or company name",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "923609016"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Matching companies (exact number match → one result)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "results": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "org_number": {
+                                                                "type": "string",
+                                                                "example": "923609016"
+                                                            },
+                                                            "company_name": {
+                                                                "type": "string",
+                                                                "example": "EQUINOR ASA"
+                                                            },
+                                                            "organisation_form": {
+                                                                "type": "string",
+                                                                "example": "ASA",
+                                                                "nullable": true
+                                                            },
+                                                            "vat_registered": {
+                                                                "type": "boolean",
+                                                                "example": true
+                                                            },
+                                                            "vat_number": {
+                                                                "type": "string",
+                                                                "example": "NO923609016MVA",
+                                                                "nullable": true
+                                                            },
+                                                            "enterprise_register": {
+                                                                "type": "boolean",
+                                                                "example": true
+                                                            },
+                                                            "bankrupt": {
+                                                                "type": "boolean",
+                                                                "example": false
+                                                            },
+                                                            "under_liquidation": {
+                                                                "type": "boolean",
+                                                                "example": false
+                                                            },
+                                                            "address": {
+                                                                "type": "string",
+                                                                "nullable": true
+                                                            },
+                                                            "postalcode": {
+                                                                "type": "string",
+                                                                "nullable": true
+                                                            },
+                                                            "city": {
+                                                                "type": "string",
+                                                                "nullable": true
+                                                            },
+                                                            "country": {
+                                                                "type": "string",
+                                                                "example": "NO"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "No company found"
+                    },
+                    "422": {
+                        "description": "Missing query or unsupported country"
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/compliance/peppol-lookup": {
+            "get": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Check whether a buyer can receive e-invoices over Peppol",
+                "description": "Looks the buyer up in the Peppol directory. For Norway pass the organisation number: `reachable=true` means the buyer is registered in ELMA and must receive an EHF e-invoice; `reachable=false` means it is not on Peppol. The directory resolves asynchronously — `status=pending` means ask again in a few seconds. Definite answers are cached for 24h. Free of charge.",
+                "operationId": "3684b4402955691f892f80d141868c7a",
+                "parameters": [
+                    {
+                        "name": "country",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "NO"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "id",
+                        "in": "query",
+                        "description": "Participant id — NO: organisation number",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "923609016"
+                        }
+                    },
+                    {
+                        "name": "scheme",
+                        "in": "query",
+                        "description": "Peppol identifier scheme (NO default 0192)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "0192"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Lookup result",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "properties": {
+                                                "status": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "reachable",
+                                                        "not_reachable",
+                                                        "pending"
+                                                    ]
+                                                },
+                                                "reachable": {
+                                                    "type": "boolean",
+                                                    "nullable": true
+                                                },
+                                                "country": {
+                                                    "type": "string",
+                                                    "example": "NO"
+                                                },
+                                                "scheme": {
+                                                    "type": "string",
+                                                    "example": "0192"
+                                                },
+                                                "id": {
+                                                    "type": "string",
+                                                    "example": "923609016"
+                                                },
+                                                "document_types": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "example": "xml.ubl.invoice.bis3"
+                                                    }
+                                                },
+                                                "transport_type_code": {
+                                                    "type": "string",
+                                                    "example": "peppol",
+                                                    "nullable": true
+                                                },
+                                                "checked_at": {
+                                                    "type": "string",
+                                                    "format": "date-time"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Invalid id or unsupported country"
+                    },
+                    "502": {
+                        "description": "Provider error"
                     }
                 },
                 "security": [
@@ -1581,8 +1861,27 @@
                 "tags": [
                     "Compliance"
                 ],
-                "summary": "List compliance transactions (filterable by date / state / type)",
+                "summary": "List compliance transactions (filterable by date / state / type / country)",
                 "operationId": "4fe79e545656f42c0dd6021a0478cd6a",
+                "parameters": [
+                    {
+                        "name": "compliance_enrollment_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "country",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "NO"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK"
@@ -1593,8 +1892,8 @@
                 "tags": [
                     "Compliance"
                 ],
-                "summary": "Record and (optionally) submit a Flux 10 transaction",
-                "description": "Persists the transaction locally, then forwards it to the provider as the appropriate B2Brouter invoice type (IssuedSimplifiedInvoice for B2C, IssuedInvoice for outbound, ReceivedInvoice for inbound). Set `submit_now=false` to defer submission.",
+                "summary": "Record a transaction for an enrolled country (and submit it when the country is booked as e-invoicing)",
+                "description": "Persists the transaction locally. When the enrollment's service is `e_invoicing` it is forwarded to the provider right away (France: Flux 1 as IssuedSimplifiedInvoice/IssuedInvoice/ReceivedInvoice; Norway: EHF 3.0 / Peppol BIS 3.0 delivered to the buyer's Peppol address). In `e_reporting` mode it is only stored and reported via the daily ledgers. Set `submit_now=false` to defer submission. Norway requires `counterparty_register_id` (the buyer's organisation number) and `counterparty_name`; transaction_type must be `b2b_domestic_outbound`; credit notes set `is_credit_note=true` + `amended_number`.",
                 "operationId": "35d08bf213aa62e763155887fc57b5d0",
                 "requestBody": {
                     "required": true,
@@ -1743,6 +2042,53 @@
                                     "submit_now": {
                                         "type": "boolean",
                                         "default": true
+                                    },
+                                    "counterparty_register_id": {
+                                        "description": "Buyer company register id — NO: 9-digit organisation number (Peppol 0192), required",
+                                        "type": "string",
+                                        "example": "923609016",
+                                        "nullable": true
+                                    },
+                                    "counterparty_address": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "counterparty_city": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "counterparty_postalcode": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "counterparty_email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "nullable": true
+                                    },
+                                    "buyer_reference": {
+                                        "description": "Buyer reference (Peppol BuyerReference). NO: defaults to the buyer org. number",
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "is_credit_note": {
+                                        "type": "boolean",
+                                        "default": false
+                                    },
+                                    "amended_number": {
+                                        "description": "Credit notes: number of the invoice being corrected",
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "amended_date": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "nullable": true
+                                    },
+                                    "extra_info": {
+                                        "description": "Free-text invoice note. NO: mandatory legal notes (Foretaksregisteret, reverse charge) are added automatically",
+                                        "type": "string",
+                                        "nullable": true
                                     }
                                 },
                                 "type": "object"
@@ -2105,6 +2451,89 @@
                 "summary": "Request activation of the E-Reporting feature",
                 "description": "Submits an activation request for the E-Reporting feature. Intentionally NOT gated by the compliance access middleware, so customers without the feature can request it. The authenticated user's name/email are used as identity; body values are fallbacks only.",
                 "operationId": "05eec6d3afa30f0dc4df8ae888423c6a",
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "nullable": true
+                                    },
+                                    "email": {
+                                        "description": "Fallback if the authenticated user has no email",
+                                        "type": "string",
+                                        "format": "email",
+                                        "maxLength": 255,
+                                        "nullable": true
+                                    },
+                                    "company": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "nullable": true
+                                    },
+                                    "phone": {
+                                        "type": "string",
+                                        "maxLength": 64,
+                                        "nullable": true
+                                    },
+                                    "message": {
+                                        "type": "string",
+                                        "maxLength": 5000,
+                                        "nullable": true
+                                    },
+                                    "language": {
+                                        "type": "string",
+                                        "example": "en",
+                                        "nullable": true
+                                    },
+                                    "service": {
+                                        "type": "string",
+                                        "enum": [
+                                            "e_reporting",
+                                            "e_invoicing"
+                                        ],
+                                        "nullable": true
+                                    },
+                                    "countries": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "example": "NO"
+                                        },
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Request stored and forwarded to the team"
+                    },
+                    "422": {
+                        "description": "Validation failed / email missing"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/smart-enrichment-request": {
+            "post": {
+                "tags": [
+                    "Smart Enrichment"
+                ],
+                "summary": "Request access to the Smart Enrichment feature",
+                "description": "Submits an access request for the Smart Enrichment (reverse VAT lookup) feature. Intentionally NOT gated by the smart_enrichment access middleware, so customers without the feature can request it. The authenticated user's name/email are used as identity; body values are fallbacks only.",
+                "operationId": "ef2628f239a98ead8cfbaeba25b7940c",
                 "requestBody": {
                     "required": false,
                     "content": {
@@ -3047,10 +3476,29 @@
                                                 "city": {
                                                     "type": "string",
                                                     "nullable": true
+                                                },
+                                                "mode": {
+                                                    "description": "Per-row search mode; overrides the batch-level `mode`.",
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "default",
+                                                        "complex"
+                                                    ],
+                                                    "nullable": true
                                                 }
                                             },
                                             "type": "object"
                                         }
+                                    },
+                                    "mode": {
+                                        "description": "Search mode for every row in the batch. `default` searches with Gemini and consults Perplexity only when nothing is found. `complex` runs both providers from the start and cross-checks them — higher hit rate on hard lookups, higher cost per lookup.",
+                                        "type": "string",
+                                        "enum": [
+                                            "default",
+                                            "complex"
+                                        ],
+                                        "example": "default",
+                                        "nullable": true
                                     }
                                 },
                                 "type": "object"
@@ -5403,8 +5851,18 @@
                         "example": "fr"
                     },
                     "regime": {
+                        "description": "Provider regime: dgfip_flux10 (France), peppol_bis3 (Norway, EHF over Peppol)",
                         "type": "string",
                         "example": "dgfip_flux10"
+                    },
+                    "service": {
+                        "description": "Service booked for this country",
+                        "type": "string",
+                        "enum": [
+                            "e_reporting",
+                            "e_invoicing"
+                        ],
+                        "example": "e_reporting"
                     },
                     "provider": {
                         "type": "string",
@@ -5511,6 +5969,109 @@
                     "source": {
                         "type": "string",
                         "example": "corpus",
+                        "nullable": true
+                    },
+                    "mode": {
+                        "description": "The search mode this lookup actually ran in.",
+                        "type": "string",
+                        "enum": [
+                            "default",
+                            "complex"
+                        ],
+                        "example": "default",
+                        "nullable": true
+                    },
+                    "providerVerdicts": {
+                        "description": "What each AI provider independently concluded. Populated when more than one provider searched (complex mode, or a fallback). Two providers reporting the same vatNumber is the strongest confirmation this layer produces.",
+                        "type": "array",
+                        "items": {
+                            "properties": {
+                                "provider": {
+                                    "type": "string",
+                                    "example": "perplexity"
+                                },
+                                "model": {
+                                    "type": "string",
+                                    "example": "sonar-pro",
+                                    "nullable": true
+                                },
+                                "status": {
+                                    "type": "string",
+                                    "example": "found"
+                                },
+                                "vatNumber": {
+                                    "type": "string",
+                                    "example": "DE811704788",
+                                    "nullable": true
+                                },
+                                "confidence": {
+                                    "type": "number",
+                                    "format": "float",
+                                    "example": 92,
+                                    "nullable": true
+                                },
+                                "grounded": {
+                                    "description": "Whether the answer was backed by a real web search rather than model memory.",
+                                    "type": "boolean",
+                                    "example": true
+                                },
+                                "sourceUrl": {
+                                    "type": "string",
+                                    "nullable": true
+                                }
+                            },
+                            "type": "object"
+                        },
+                        "nullable": true
+                    },
+                    "addressQuality": {
+                        "description": "What we made of the address you submitted. Use `warnings` to correct your own records — `postal_code_city_mismatch` and `postal_code_unassigned` mean the postal code you sent is wrong, and `derivedPlace` is where it actually points.",
+                        "properties": {
+                            "providedPostalCode": {
+                                "type": "string",
+                                "example": "40547",
+                                "nullable": true
+                            },
+                            "providedCity": {
+                                "type": "string",
+                                "example": "Düsseldorf",
+                                "nullable": true
+                            },
+                            "postalCodeFormatValid": {
+                                "type": "boolean",
+                                "example": true,
+                                "nullable": true
+                            },
+                            "postalCodeAssigned": {
+                                "type": "boolean",
+                                "example": true,
+                                "nullable": true
+                            },
+                            "postalCodeTrusted": {
+                                "description": "False when the postal code was excluded from the search because it is malformed, non-existent, or contradicts the city.",
+                                "type": "boolean",
+                                "example": true
+                            },
+                            "derivedPlace": {
+                                "description": "The city/region the postal code points at.",
+                                "type": "string",
+                                "example": "Düsseldorf",
+                                "nullable": true
+                            },
+                            "cityMatchesPostalCode": {
+                                "type": "boolean",
+                                "example": true,
+                                "nullable": true
+                            },
+                            "warnings": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "example": "postal_code_city_mismatch"
+                                }
+                            }
+                        },
+                        "type": "object",
                         "nullable": true
                     }
                 },
@@ -6640,16 +7201,16 @@
             "description": "Compliance"
         },
         {
+            "name": "Smart Enrichment",
+            "description": "Smart Enrichment"
+        },
+        {
             "name": "Partners",
             "description": "Partners"
         },
         {
             "name": "Reports",
             "description": "Reports"
-        },
-        {
-            "name": "Smart Enrichment",
-            "description": "Smart Enrichment"
         },
         {
             "name": "Tenant",

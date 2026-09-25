@@ -151,6 +151,12 @@ Each endpoint handles:
 | `Token`                     | Access token with type and expiry; 15-second buffer for proactive refresh                       |
 | `VatCertificateExport`      | Bulk export job reference (`exportId` + optional message)                                       |
 | `ProviderDocument`          | Attached provider document metadata (type, date, MIME, hash, nested line item)                  |
+| `ComplianceEnrollment`      | Per-country compliance enrollment: country, regime, `service`, provisioning status              |
+| `ComplianceTransaction`     | Recorded transaction / e-invoice: amounts, state, buyer fields, `documentType`, `providerState` |
+| `ComplianceTaxReport`       | DGFiP tax report lifecycle of a transaction (France)                                            |
+| `SireneLookupResult`        | Company data from the French SIRENE registry                                                    |
+| `RegistryCompany`           | Company from a national register (Norway: Brønnøysund) — org number, VAT / register flags       |
+| `PeppolLookupResult`        | Peppol directory lookup: `status` (reachable / not_reachable / pending), document types         |
 
 All DTOs expose `toArray()` for serialization and a static `fromArray()` factory.
 
@@ -443,6 +449,12 @@ submit transactions (individually or via CSV import), and track the resulting DG
 All `compliance` routes require an active E-Reporting subscription / feature grant on your
 account — except `requestEReportingAccess()`, which is how you ask for one.
 
+**Per-country services:** each enrollment books one service for one country — `e_reporting`
+(France, regime `dgfip_flux10`) or `e_invoicing` (Norway EHF / Peppol BIS 3.0, regime
+`peppol_bis3`, see [below](#-e-invoicing-norway-ehf--peppol)). Every country is unlocked and
+billed separately (one-off setup fee + per document). Enrolling for a service your company does not
+have yields a 403 `HttpException` whose body carries `code: "service_not_active"`.
+
 ### Request feature activation
 
 Not enabled yet? This route is deliberately **not** gated — it requests activation of the
@@ -455,6 +467,8 @@ await client.eReporting.requestEReportingAccess({
   phone: '+43 660 1234567',
   message: 'Please activate e-reporting for our account.',
   language: 'de', // locale of the confirmation mail
+  service: 'e_invoicing', // optional: 'e_reporting' (default) | 'e_invoicing'
+  countries: ['NO'], // optional: the countries you want the service for
 });
 ```
 
@@ -541,6 +555,8 @@ const transactions = await client.eReporting.listTransactions({
   dateTo: '2026-07-31',
   state: 'pending', // 'pending' | 'sending' | 'submitted' | 'error'
   transactionType: 'b2c_outbound',
+  complianceEnrollmentId: enrollment.id, // optional: one enrollment only
+  country: 'FR', // optional: one country only
   page: 1,
   perPage: 25,
 });
@@ -622,6 +638,119 @@ for (const bucket of stats.timeSeries) {
 for (const row of stats.byCountry) {
   console.log(`${row.country} → ${row.total}`); // 'unknown' groups NULL partners
 }
+```
+
+### 🇳🇴 E-Invoicing Norway (EHF / Peppol)
+
+Send EHF e-invoices and credit notes (Peppol BIS Billing 3.0) to Norwegian buyers. The
+`e_invoicing` service for Norway is billed separately from French e-reporting (one-off setup
+fee + per document) — ask for it via `requestEReportingAccess({ service: 'e_invoicing', countries: ['NO'] })`.
+
+**1. Registry lookup** — resolve an organisation number, `NO…MVA` VAT number or company name in
+the Brønnøysund register (rate-limited to 30 requests/minute; 404 when nothing is found):
+
+```ts
+import { NorwegianOrgNumber } from '@taxora/sdk';
+
+const [company] = await client.eReporting.registryLookup('NO', '923609016');
+console.log(company.companyName, company.vatNumber, company.vatRegistered, company.enterpriseRegister);
+
+// Client-side helper (mod-11 check digit, accepts spaces / NO prefix / MVA suffix)
+NorwegianOrgNumber.isValid('NO 923 609 016 MVA'); // true
+NorwegianOrgNumber.normalize('923609016MVA'); // '923609016'
+NorwegianOrgNumber.toVatNumber('923609016'); // 'NO923609016MVA'
+```
+
+**2. Enrollment** — registers your company as a Peppol participant. The organisation number is
+validated and normalized before sending:
+
+```ts
+const noEnrollment = await client.eReporting.createNorwayEnrollment({
+  orgNumber: company.orgNumber,
+  companyName: company.companyName,
+  address: company.address!,
+  city: company.city!,
+  postalcode: company.postalcode!,
+  email: 'faktura@acme.no',
+  vatRegistered: company.vatRegistered, // optional, default true → "MVA" on invoices
+  enterpriseRegister: company.enterpriseRegister, // optional, default false → "Foretaksregisteret"
+  reception: false, // optional: also receive e-invoices over Peppol
+});
+// Equivalent: client.eReporting.createEnrollment({ country: 'NO', ... })
+
+console.log(noEnrollment.service, noEnrollment.regime); // 'e_invoicing' 'peppol_bis3'
+```
+
+**3. Peppol lookup** — check that the buyer can receive EHF invoices (free of charge). The
+directory resolves asynchronously: `pending` means ask again in a few seconds.
+
+```ts
+let reach = await client.eReporting.peppolLookup('NO', '974760673'); // scheme defaults to 0192
+if (reach.isPending) {
+  await new Promise((r) => setTimeout(r, 3000));
+  reach = await client.eReporting.peppolLookup('NO', '974760673');
+}
+console.log(reach.status, reach.reachable, reach.documentTypes); // 'reachable' true [...]
+```
+
+**4. Send an invoice** — Norway requires `transactionType: 'b2b_domestic_outbound'`, the buyer's
+organisation number (`counterpartyRegisterId`) and `counterpartyName` (enforced server-side, 422):
+
+```ts
+const invoice = await client.eReporting.createTransaction({
+  complianceEnrollmentId: noEnrollment.id,
+  transactionType: 'b2b_domestic_outbound',
+  invoiceNumber: 'NO-2026-0001',
+  invoiceDate: '2026-09-25',
+  dueDate: '2026-10-09',
+  currency: 'NOK',
+  subtotal: 2000,
+  taxAmount: 500,
+  total: 2500,
+  counterpartyName: 'EXAMPLE BUYER AS',
+  counterpartyCountry: 'NO',
+  counterpartyRegisterId: '974760673',
+  counterpartyAddress: 'Storgata 1',
+  counterpartyCity: 'Oslo',
+  counterpartyPostalcode: '0155',
+  counterpartyEmail: 'ap@buyer.example', // optional
+  buyerReference: 'PO-4711', // optional, defaults to the buyer's org number
+  invoiceLines: [
+    { description: 'Consulting', quantity: 2, price: 1000, taxes: [{ name: 'MVA', percent: 25, category: 'S' }] },
+  ],
+});
+
+// `state` tracks submission; `providerState` the Peppol delivery (e.g. sent, accepted, refused, paid)
+const current = await client.eReporting.getTransaction(invoice.id);
+console.log(current.state, current.providerState, current.documentType); // … 'invoice'
+```
+
+**5. Send a credit note** — set `isCreditNote` and reference the corrected invoice:
+
+```ts
+const creditNote = await client.eReporting.createTransaction({
+  complianceEnrollmentId: noEnrollment.id,
+  transactionType: 'b2b_domestic_outbound',
+  invoiceNumber: 'NO-2026-0001-CN',
+  invoiceDate: '2026-09-30',
+  currency: 'NOK',
+  subtotal: 1000,
+  taxAmount: 250,
+  total: 1250,
+  counterpartyName: 'EXAMPLE BUYER AS',
+  counterpartyRegisterId: '974760673',
+  isCreditNote: true,
+  amendedNumber: 'NO-2026-0001', // required for credit notes in Norway
+  amendedDate: '2026-09-25',
+  extraInfo: 'Credit for one returned consulting day',
+  invoiceLines: [
+    { description: 'Consulting', quantity: 1, price: 1000, taxes: [{ name: 'MVA', percent: 25, category: 'S' }] },
+  ],
+});
+console.log(creditNote.isCreditNote); // true
+
+// All Norwegian documents
+const noDocs = await client.eReporting.listTransactions({ country: 'NO' });
 ```
 
 ---

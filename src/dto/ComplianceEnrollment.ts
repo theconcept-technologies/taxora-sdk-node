@@ -1,4 +1,5 @@
 import { type ComplianceEnrollmentStatus, toComplianceEnrollmentStatus } from '../enums/ComplianceEnrollmentStatus.js';
+import { ComplianceService, toComplianceService } from '../enums/ComplianceService.js';
 
 function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
@@ -13,8 +14,9 @@ function asNumber(value: unknown): number {
 }
 
 /**
- * A compliance enrollment — the merchant's provisioned e-reporting account for
- * one reporting country/regime (GET/POST /compliance/enrollments).
+ * A compliance enrollment — the merchant's provisioned account for one country
+ * and service (GET/POST /compliance/enrollments), e.g. France e-reporting
+ * (regime "dgfip_flux10") or Norway e-invoicing (regime "peppol_bis3").
  */
 export class ComplianceEnrollment {
   constructor(
@@ -37,6 +39,8 @@ export class ComplianceEnrollment {
     public readonly autoSend: boolean,
     public readonly createdAt: string | null,
     public readonly updatedAt: string | null,
+    /** Booked service ("e_reporting" / "e_invoicing"); `unknown` when an older server omits it. */
+    public readonly service: ComplianceService = ComplianceService.UNKNOWN,
   ) {}
 
   static fromArray(data: Record<string, unknown>): ComplianceEnrollment {
@@ -66,6 +70,7 @@ export class ComplianceEnrollment {
       data['auto_send'] === true,
       asNullableString(data['created_at']),
       asNullableString(data['updated_at']),
+      toComplianceService(data['service']),
     );
   }
 }
