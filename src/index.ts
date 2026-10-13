@@ -140,6 +140,44 @@ export { PeppolLookupStatus, toPeppolLookupStatus, describePeppolLookupStatus } 
 // Helpers
 export { NorwegianOrgNumber } from './support/NorwegianOrgNumber.js';
 
+// Webhooks
+export {
+  verifyWebhookSignature,
+  constructWebhookEvent,
+  parseWebhookSignatureHeader,
+  computeWebhookSignature,
+  generateWebhookSignatureHeader,
+  WebhookSignatureVerificationError,
+  WEBHOOK_SIGNATURE_HEADER,
+  WEBHOOK_ID_HEADER,
+  DEFAULT_WEBHOOK_TOLERANCE_SECONDS,
+} from './webhooks/WebhookSignature.js';
+export type {
+  WebhookRawBody,
+  WebhookSignatureHeaderInput,
+  WebhookVerifyOptions,
+  WebhookSignatureErrorReason,
+  ParsedWebhookSignatureHeader,
+} from './webhooks/WebhookSignature.js';
+export type {
+  WebhookEventType,
+  WebhookEventEnvelope,
+  TaxoraWebhookEvent,
+  VatWebhookObject,
+  ComplianceLedgerWebhookObject,
+  ComplianceTransactionWebhookObject,
+  EnrichmentCompletedWebhookObject,
+  EnrichmentUpdatedWebhookObject,
+  TestWebhookObject,
+  VatValidatedEvent,
+  VatStateChangedEvent,
+  ComplianceLedgerStateChangedEvent,
+  ComplianceTransactionStateChangedEvent,
+  EnrichmentCompletedEvent,
+  EnrichmentUpdatedEvent,
+  WebhookTestEvent,
+} from './webhooks/WebhookEvent.js';
+
 // Exceptions
 export { TaxoraException } from './exceptions/TaxoraException.js';
 export { AuthenticationException } from './exceptions/AuthenticationException.js';

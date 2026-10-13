@@ -894,6 +894,68 @@ const noRetries = TaxoraClientFactory.create({ apiKey: '…', retryPolicy: Retry
 
 ---
 
+## 🔐 Webhook Signatures
+
+Taxora can sign every webhook request with HMAC-SHA256 (opt-in per endpoint: dashboard → **Developer → Webhooks**,
+or `POST /v1/webhooks/{id}/signing/enable`). Signed requests carry:
+
+```
+Taxora-Signature: t=1716115200,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56ff536d0ce8e108d8bd
+Taxora-Webhook-Id: 550e8400-e29b-41d4-a716-446655440000
+```
+
+`constructWebhookEvent` verifies the signature (constant-time, 5-minute replay window) and returns a typed event:
+
+```ts
+import express from 'express';
+import { constructWebhookEvent, WebhookSignatureVerificationError } from '@taxora/sdk';
+
+const app = express();
+
+// express.raw — NOT express.json: the signature covers the exact bytes Taxora sent.
+app.post('/taxora-webhook', express.raw({ type: 'application/json' }), (req, res) => {
+  let event;
+  try {
+    event = constructWebhookEvent(req.body, req.header('Taxora-Signature'), process.env.TAXORA_WEBHOOK_SECRET!, {
+      tolerance: 300, // seconds, default
+    });
+  } catch (err) {
+    if (err instanceof WebhookSignatureVerificationError) {
+      return res.status(400).send(err.message); // err.reason: 'no_matching_signature' | 'timestamp_outside_tolerance' | …
+    }
+    throw err;
+  }
+
+  switch (event.event) {
+    case 'vat.validated':
+      console.log(event.data.object.vat_uid, event.data.object.state); // typed
+      break;
+    case 'enrichment.completed':
+      console.log(event.data.object.foundCount);
+      break;
+  }
+
+  res.sendStatus(200);
+});
+```
+
+Next.js App Router: `const rawBody = await request.text();` (not `request.json()`).
+
+| Helper                                                                 | Purpose                                                      |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `verifyWebhookSignature(rawBody, header, secret, { tolerance })`       | Returns `true` or throws `WebhookSignatureVerificationError` |
+| `constructWebhookEvent(rawBody, header, secret, { tolerance })`        | Verifies, then parses into `TaxoraWebhookEvent`              |
+| `generateWebhookSignatureHeader(rawBody, secret, timestamp?)`          | Builds a valid header — for testing your own handler         |
+| `parseWebhookSignatureHeader(header)` / `computeWebhookSignature(...)` | Low-level building blocks                                    |
+
+- **Rotation:** while Taxora rotates your secret, requests carry one `v1=` per live secret — any match is accepted.
+  `secret` may also be an array, so you can accept old and new secret on your side during a deploy.
+- **Raw body:** pass a `string`, `Buffer` or `Uint8Array`. Passing an already parsed object throws
+  `reason: 'invalid_body'`.
+- **Idempotency:** dedupe on `event.id` (= `Taxora-Webhook-Id`), which stays the same across retries.
+
+---
+
 ## 🔌 VatState Helpers
 
 ```ts
