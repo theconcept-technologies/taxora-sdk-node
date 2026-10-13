@@ -4,10 +4,16 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  # Re-publish an existing tag (e.g. after a failed publish) with the current workflow.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to publish, e.g. v1.3.0'
+        required: true
 
 permissions:
   contents: write
-  id-token: write # required for npm provenance
+  id-token: write # npm trusted publishing (OIDC) + provenance
 
 jobs:
   release:
@@ -16,6 +22,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -33,12 +41,18 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Trusted publishing needs npm >= 11.5.1; Node 20 ships npm 10. Upgraded only after
+      # `npm ci` so installs keep the bundled npm's behaviour.
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@^11.5.1
+
+      # No token: npm exchanges the GitHub OIDC identity for a short-lived publish credential.
+      # Configured on npmjs.com → @taxora/sdk → Settings → Trusted Publisher (this repo, release.yml).
       - name: Publish to npm
         run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           generate_release_notes: true
