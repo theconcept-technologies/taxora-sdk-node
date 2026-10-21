@@ -9,6 +9,7 @@ import { SmartEnrichmentStatistics } from '../../src/dto/SmartEnrichmentStatisti
 import { type SmartEnrichmentStatisticsInterval } from '../../src/dto/SmartEnrichmentStatistics.js';
 import { SmartEnrichmentStatus } from '../../src/enums/SmartEnrichmentStatus.js';
 import { SmartEnrichmentMode } from '../../src/enums/SmartEnrichmentMode.js';
+import { SmartEnrichmentRejectionReason } from '../../src/enums/SmartEnrichmentRejectionReason.js';
 import { HttpException } from '../../src/exceptions/HttpException.js';
 import { TaxoraException } from '../../src/exceptions/TaxoraException.js';
 import { ValidationException } from '../../src/exceptions/ValidationException.js';
@@ -786,6 +787,74 @@ describe('SmartEnrichmentEndpoint search mode', () => {
     expect(result?.providerVerdicts).toHaveLength(2);
     expect(result?.providerVerdicts[1]?.provider).toBe('perplexity');
     expect(result?.addressQuality?.derivedPlace).toBe('Düsseldorf');
+  });
+
+  it('exposes the VAT numbers a not_found result rejected, with the reason', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        jobId: 'job-rejected',
+        status: 'not_found',
+        vatNumber: null,
+        country: 'DE',
+        rejectedCandidates: [
+          { vatNumber: 'DE176664507', reason: 'vat_invalid' },
+          { vatNumber: 'DE811704788', reason: 'name_mismatch' },
+        ],
+      }),
+    ]);
+
+    const job = await endpoint.lookup({ companyName: 'Ambulance Köpke GmbH', country: 'DE' });
+    const result = job.result();
+
+    expect(result?.status).toBe(SmartEnrichmentStatus.NOT_FOUND);
+    expect(result?.vatNumber).toBeUndefined();
+    expect(result?.hasRejectedCandidates()).toBe(true);
+    expect(result?.rejectedCandidates).toEqual([
+      { vatNumber: 'DE176664507', reason: SmartEnrichmentRejectionReason.VAT_INVALID },
+      { vatNumber: 'DE811704788', reason: SmartEnrichmentRejectionReason.NAME_MISMATCH },
+    ]);
+    expect(result?.toArray()['rejectedCandidates']).toEqual([
+      { vatNumber: 'DE176664507', reason: 'vat_invalid' },
+      { vatNumber: 'DE811704788', reason: 'name_mismatch' },
+    ]);
+  });
+
+  it('parses rejected candidates tolerantly', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        jobId: 'job-rejected-odd',
+        status: 'not_found',
+        rejectedCandidates: [
+          { vatNumber: 'ATU12345678', reason: 'some_future_reason' },
+          { vatNumber: 'ATU87654321' },
+          { reason: 'vat_invalid' },
+          { vatNumber: '   ', reason: 'vat_invalid' },
+          'not-an-object',
+          null,
+        ],
+      }),
+    ]);
+
+    const job = await endpoint.lookup({ companyName: 'Example GmbH', country: 'AT' });
+
+    // Entries without a VAT number are dropped; an unknown or missing reason must not break
+    // parsing for older SDK versions.
+    expect(job.result()?.rejectedCandidates).toEqual([
+      { vatNumber: 'ATU12345678', reason: SmartEnrichmentRejectionReason.UNKNOWN },
+      { vatNumber: 'ATU87654321', reason: SmartEnrichmentRejectionReason.UNKNOWN },
+    ]);
+  });
+
+  it('defaults rejected candidates to an empty list', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({ jobId: 'job-none', status: 'not_found', rejectedCandidates: null }),
+    ]);
+
+    const result = (await endpoint.lookup({ companyName: 'Example GmbH', country: 'DE' })).result();
+
+    expect(result?.rejectedCandidates).toEqual([]);
+    expect(result?.hasRejectedCandidates()).toBe(false);
+    expect(result?.toArray()['rejectedCandidates']).toEqual([]);
   });
 
   it('leaves mode undefined when the API does not report one', async () => {

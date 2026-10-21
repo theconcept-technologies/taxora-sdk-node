@@ -15,134 +15,6 @@
         }
     ],
     "paths": {
-        "/v1/analytics": {
-            "get": {
-                "tags": [
-                    "Company"
-                ],
-                "summary": "Get analytics for the authenticated user's company",
-                "description": "Returns analytics data for the authenticated user's company",
-                "operationId": "6414d44e304a7e4fd815f0519f6ac12d",
-                "responses": {
-                    "200": {
-                        "description": "Company retrieved successfully",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "data": {
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Not authorized"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": [],
-                        "ApiKeyAuth": []
-                    }
-                ]
-            }
-        },
-        "/v1/analytics/insights": {
-            "get": {
-                "tags": [
-                    "Company"
-                ],
-                "summary": "Get advanced analytics insights",
-                "description": "Returns validation, geographic, AI, time-based, and business insights with optional filters.",
-                "operationId": "7573ee35cc371033ec4a2e404b0858b1",
-                "parameters": [
-                    {
-                        "name": "from",
-                        "in": "query",
-                        "description": "Start date (ISO 8601)",
-                        "required": false,
-                        "schema": {
-                            "type": "string",
-                            "format": "date"
-                        }
-                    },
-                    {
-                        "name": "to",
-                        "in": "query",
-                        "description": "End date (ISO 8601)",
-                        "required": false,
-                        "schema": {
-                            "type": "string",
-                            "format": "date"
-                        }
-                    },
-                    {
-                        "name": "account_id",
-                        "in": "query",
-                        "description": "Filter analytics for a specific account/company ID",
-                        "required": false,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "name": "api_key",
-                        "in": "query",
-                        "description": "Filter analytics by API key (plaintext or hashed)",
-                        "required": false,
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "name": "critical_threshold",
-                        "in": "query",
-                        "description": "Failure rate threshold for highlighting critical countries (0-1)",
-                        "required": false,
-                        "schema": {
-                            "type": "number",
-                            "format": "float"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Analytics insights payload",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean"
-                                        },
-                                        "data": {
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Not authorized"
-                    },
-                    "403": {
-                        "description": "Forbidden"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": [],
-                        "ApiKeyAuth": []
-                    }
-                ]
-            }
-        },
         "/v1/login": {
             "post": {
                 "tags": [
@@ -427,319 +299,6 @@
                         "ApiKeyAuth": []
                     }
                 ]
-            },
-            "post": {
-                "tags": [
-                    "Company"
-                ],
-                "summary": "Update a company",
-                "description": "Updates an existing company",
-                "operationId": "de549d7bcb0a00698c7e775d597cac74",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "properties": {
-                                    "id": {
-                                        "type": "integer",
-                                        "example": 1
-                                    },
-                                    "name": {
-                                        "type": "string",
-                                        "example": "Updated Company Name"
-                                    },
-                                    "vat_history_valid_threshold_use_global": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "vat_history_valid_threshold": {
-                                        "type": "integer",
-                                        "maximum": 100,
-                                        "minimum": 0,
-                                        "example": 60
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Company updated successfully"
-                    },
-                    "422": {
-                        "description": "Validation failed"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": [],
-                        "ApiKeyAuth": []
-                    }
-                ]
-            },
-            "delete": {
-                "tags": [
-                    "Company"
-                ],
-                "summary": "Deactivate company account and delete allowable data",
-                "description": "Deactivates all auth access, deletes deletable data, and preserves subscriptions, orders, journals, and VAT requests.",
-                "operationId": "68bfaa3178cfc36ea473de4fc5a977b5",
-                "responses": {
-                    "200": {
-                        "description": "Company deactivated"
-                    },
-                    "401": {
-                        "description": "Not authorized"
-                    },
-                    "403": {
-                        "description": "Not enough permissions"
-                    },
-                    "500": {
-                        "description": "Server error"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": [],
-                        "ApiKeyAuth": []
-                    }
-                ]
-            }
-        },
-        "/v1/company/ai-score-threshold": {
-            "post": {
-                "tags": [
-                    "Company"
-                ],
-                "summary": "Update company AI score threshold",
-                "description": "Updates only the company VAT history valid threshold override",
-                "operationId": "4f65b229ffee76134e71128bf8b1cbff",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "vat_history_valid_threshold"
-                                ],
-                                "properties": {
-                                    "vat_history_valid_threshold": {
-                                        "type": "integer",
-                                        "maximum": 100,
-                                        "minimum": 0,
-                                        "example": 60,
-                                        "nullable": true
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "AI score threshold updated successfully"
-                    },
-                    "400": {
-                        "description": "Validation failed"
-                    },
-                    "403": {
-                        "description": "Not enough permissions"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": [],
-                        "ApiKeyAuth": []
-                    }
-                ]
-            }
-        },
-        "/v1/company/closure-request": {
-            "get": {
-                "tags": [
-                    "Company"
-                ],
-                "summary": "Get the current closure request status",
-                "description": "Get the current pending closure request for the authenticated user's company (if any).",
-                "operationId": "94a9f78ffb8720d91353e28b271d31f0",
-                "responses": {
-                    "200": {
-                        "description": "Current closure request or null"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": [],
-                        "ApiKeyAuth": []
-                    }
-                ]
-            },
-            "post": {
-                "tags": [
-                    "Company"
-                ],
-                "summary": "Request closure of the authenticated user's company account",
-                "description": "Submit a request to close the whole company account. Closing the account is\nNOT instant — it creates a pending request that a Taxora backend operator must\napprove before any data is touched.",
-                "operationId": "396ecd35150568035ae422853a35d848",
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "properties": {
-                                    "reason": {
-                                        "type": "string",
-                                        "example": "We no longer need the service",
-                                        "nullable": true
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "201": {
-                        "description": "Closure request submitted"
-                    },
-                    "200": {
-                        "description": "Closure request already pending"
-                    },
-                    "401": {
-                        "description": "Not authorized"
-                    },
-                    "403": {
-                        "description": "Not enough permissions"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": [],
-                        "ApiKeyAuth": []
-                    }
-                ]
-            },
-            "delete": {
-                "tags": [
-                    "Company"
-                ],
-                "summary": "Withdraw a pending closure request",
-                "description": "Withdraw the current pending closure request for the authenticated user's company.",
-                "operationId": "0fe1a3fcafe12f2a6bfda6853892d486",
-                "responses": {
-                    "200": {
-                        "description": "Closure request withdrawn"
-                    },
-                    "401": {
-                        "description": "Not authorized"
-                    },
-                    "403": {
-                        "description": "Not enough permissions"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": [],
-                        "ApiKeyAuth": []
-                    }
-                ]
-            }
-        },
-        "/v1/company/api-key": {
-            "put": {
-                "tags": [
-                    "Company"
-                ],
-                "summary": "Create company API key",
-                "operationId": "a22923e4648772bd55a5f37d6f525748",
-                "requestBody": {
-                    "required": false,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "properties": {
-                                    "name": {
-                                        "type": "string",
-                                        "example": "Staging Key"
-                                    },
-                                    "environment": {
-                                        "description": "Target environment (default: LIVE)",
-                                        "type": "string",
-                                        "enum": [
-                                            "LIVE",
-                                            "SANDBOX"
-                                        ],
-                                        "example": "SANDBOX"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "API key created"
-                    },
-                    "401": {
-                        "description": "Not authorized"
-                    },
-                    "422": {
-                        "description": "Unable to resolve environment"
-                    },
-                    "500": {
-                        "description": "Server error"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": [],
-                        "ApiKeyAuth": []
-                    }
-                ]
-            }
-        },
-        "/v1/company/api-requests": {
-            "get": {
-                "tags": [
-                    "Company"
-                ],
-                "summary": "Get API requests for the authenticated user's company",
-                "description": "Retrieves all API requests",
-                "operationId": "c2f2b40b9cba7309aab870b66f88ee0b",
-                "parameters": [
-                    {
-                        "name": "environment",
-                        "in": "query",
-                        "description": "Filter by environment (default: LIVE)",
-                        "required": false,
-                        "schema": {
-                            "type": "string",
-                            "enum": [
-                                "LIVE",
-                                "SANDBOX"
-                            ],
-                            "example": "SANDBOX"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "API requests retrieved successfully"
-                    },
-                    "401": {
-                        "description": "Not authorized"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": [],
-                        "ApiKeyAuth": []
-                    }
-                ]
             }
         },
         "/v1/company/current-api-group": {
@@ -771,180 +330,6 @@
                     },
                     "401": {
                         "description": "Not authorized"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": [],
-                        "ApiKeyAuth": []
-                    }
-                ]
-            }
-        },
-        "/v1/company/users": {
-            "get": {
-                "tags": [
-                    "Company"
-                ],
-                "summary": "List users of the current company",
-                "description": "Returns all users that belong to the authenticated user's company. Requires Merchant Admin or Readonly permissions.",
-                "operationId": "7b55c9dbd326a6a03879bfba58625f80",
-                "responses": {
-                    "200": {
-                        "description": "Users retrieved successfully"
-                    },
-                    "401": {
-                        "description": "Not authorized"
-                    },
-                    "403": {
-                        "description": "Not enough permissions"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": [],
-                        "ApiKeyAuth": []
-                    }
-                ]
-            }
-        },
-        "/v1/company/user": {
-            "put": {
-                "tags": [
-                    "Company"
-                ],
-                "summary": "Create a new user within the current company",
-                "description": "Creates an AUTH type user in the current company and optionally assigns roles. Only Merchant Admins can create users.",
-                "operationId": "89bc5ffbf3e801991d119f6bd9db029e",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "email",
-                                    "password",
-                                    "password_confirmation"
-                                ],
-                                "properties": {
-                                    "name": {
-                                        "type": "string",
-                                        "example": "Jane Doe"
-                                    },
-                                    "firstName": {
-                                        "type": "string",
-                                        "example": "Jane"
-                                    },
-                                    "lastName": {
-                                        "type": "string",
-                                        "example": "Doe"
-                                    },
-                                    "email": {
-                                        "type": "string",
-                                        "format": "email",
-                                        "example": "jane@company.com"
-                                    },
-                                    "password": {
-                                        "type": "string",
-                                        "format": "password",
-                                        "example": "StrongP@ssw0rd"
-                                    },
-                                    "password_confirmation": {
-                                        "type": "string",
-                                        "format": "password",
-                                        "example": "StrongP@ssw0rd"
-                                    },
-                                    "state": {
-                                        "description": "User state; defaults to 'active'",
-                                        "type": "string",
-                                        "example": "active"
-                                    },
-                                    "roles": {
-                                        "description": "List of role identifiers to assign. Each item can be a role ID (integer) or a role name (string), e.g. 'backend-merchant-admin'.",
-                                        "type": "array",
-                                        "items": {
-                                            "oneOf": [
-                                                {
-                                                    "type": "integer",
-                                                    "example": 1
-                                                },
-                                                {
-                                                    "type": "string",
-                                                    "example": "backend-merchant-admin"
-                                                }
-                                            ]
-                                        },
-                                        "example": [
-                                            "backend-merchant-admin",
-                                            2
-                                        ]
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "201": {
-                        "description": "User created successfully"
-                    },
-                    "401": {
-                        "description": "Not authorized"
-                    },
-                    "403": {
-                        "description": "Not enough permissions"
-                    },
-                    "422": {
-                        "description": "Validation failed"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": [],
-                        "ApiKeyAuth": []
-                    }
-                ]
-            },
-            "delete": {
-                "tags": [
-                    "Company"
-                ],
-                "summary": "Remove (soft-delete) a user from the authenticated user's company",
-                "description": "GDPR soft-delete of a single company user (instant). The user is anonymized,\nmarked as \"deleted\" and hidden from listings; retained business records stay intact.",
-                "operationId": "2560b87a605df446a892d61bcfff94eb",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "id"
-                                ],
-                                "properties": {
-                                    "id": {
-                                        "description": "ID of the user to remove",
-                                        "type": "integer",
-                                        "example": 42
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "User removed successfully"
-                    },
-                    "401": {
-                        "description": "Not authorized"
-                    },
-                    "403": {
-                        "description": "Not enough permissions"
-                    },
-                    "422": {
-                        "description": "Validation failed"
                     }
                 },
                 "security": [
@@ -1181,7 +566,7 @@
                         }
                     },
                     "403": {
-                        "description": "The requested service is not active for this company (code service_not_active)"
+                        "description": "The requested service is not booked for this country (code service_not_active)"
                     },
                     "422": {
                         "description": "Validation failed"
@@ -1211,7 +596,12 @@
                     "404": {
                         "description": "Not found"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/compliance/sirene-lookup": {
@@ -1633,8 +1023,19 @@
                                 "pending",
                                 "sending",
                                 "submitted",
-                                "error"
+                                "error",
+                                "not_required"
                             ]
+                        }
+                    },
+                    {
+                        "name": "include_tax_rates",
+                        "in": "query",
+                        "description": "Also return `by_tax_rate` (net and VAT per tax rate).",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
                         }
                     }
                 ],
@@ -1779,6 +1180,33 @@
                                                         "type": "object"
                                                     }
                                                 },
+                                                "by_tax_rate": {
+                                                    "description": "Net and VAT per tax rate from the invoice lines (primary currency) — for reconciling with the VAT return. Only with include_tax_rates=1, otherwise null.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "properties": {
+                                                            "category": {
+                                                                "type": "string",
+                                                                "example": "S"
+                                                            },
+                                                            "percent": {
+                                                                "type": "string",
+                                                                "example": "20.00"
+                                                            },
+                                                            "lines": {
+                                                                "type": "integer"
+                                                            },
+                                                            "subtotal": {
+                                                                "type": "string"
+                                                            },
+                                                            "tax_amount": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    },
+                                                    "nullable": true
+                                                },
                                                 "by_currency": {
                                                     "type": "array",
                                                     "items": {
@@ -1825,6 +1253,71 @@
                 ]
             }
         },
+        "/compliance/revenue-statistics/tax-rates.csv": {
+            "get": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Net and VAT per month and tax rate as CSV",
+                "description": "Semicolon-separated CSV with one row per month, currency and tax rate (net, VAT, gross, number of invoice lines), computed from the invoice lines — for reconciling the reported figures with your VAT return. Same filters as /compliance/revenue-statistics.",
+                "operationId": "617b412191e7053374f635c22f992ab9",
+                "parameters": [
+                    {
+                        "name": "date_from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "date_to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "transaction_type",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "state",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CSV file",
+                        "content": {
+                            "text/csv": {}
+                        }
+                    },
+                    "403": {
+                        "description": "E-Reporting access is not active"
+                    },
+                    "422": {
+                        "description": "Validation failed"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
         "/compliance/tax-reports": {
             "get": {
                 "tags": [
@@ -1836,7 +1329,12 @@
                     "200": {
                         "description": "OK"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/compliance/tax-reports/{id}": {
@@ -1853,7 +1351,12 @@
                     "404": {
                         "description": "Not found"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/compliance/transactions": {
@@ -1886,7 +1389,12 @@
                     "200": {
                         "description": "OK"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             },
             "post": {
                 "tags": [
@@ -2043,6 +1551,17 @@
                                         "type": "boolean",
                                         "default": true
                                     },
+                                    "invoice_pdf": {
+                                        "description": "E-invoicing only: your own invoice PDF, base64-encoded (max 10 MB). Attached to the e-invoice as its visual representation. The structured e-invoice stays the legal document; whether the buyer's system shows the PDF depends on that system.",
+                                        "type": "string",
+                                        "format": "byte",
+                                        "nullable": true
+                                    },
+                                    "invoice_pdf_filename": {
+                                        "type": "string",
+                                        "example": "RE-2027-0001.pdf",
+                                        "nullable": true
+                                    },
                                     "counterparty_register_id": {
                                         "description": "Buyer company register id — NO: 9-digit organisation number (Peppol 0192), required",
                                         "type": "string",
@@ -2131,7 +1650,12 @@
                     "404": {
                         "description": "Not found"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             },
             "put": {
                 "tags": [
@@ -2236,6 +1760,16 @@
                                     "payment_terms": {
                                         "type": "string",
                                         "nullable": true
+                                    },
+                                    "invoice_pdf": {
+                                        "description": "E-invoicing only: replaces the attached invoice PDF (base64, max 10 MB).",
+                                        "type": "string",
+                                        "format": "byte",
+                                        "nullable": true
+                                    },
+                                    "invoice_pdf_filename": {
+                                        "type": "string",
+                                        "nullable": true
                                     }
                                 },
                                 "type": "object"
@@ -2287,6 +1821,49 @@
                     },
                     "422": {
                         "description": "Only pending transactions can be deleted"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/compliance/transactions/{id}/document": {
+            "get": {
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Download the legal e-invoice document",
+                "description": "E-invoicing only: the structured e-invoice (e.g. EHF/Peppol UBL XML) exactly as it was sent to the buyer — the legally binding invoice. Available once the transaction is `submitted`. Taxora keeps its own archived copy, so the document stays downloadable here. Use `document_url` from the transaction to link it from your own system.",
+                "operationId": "32172cc4379792056c2cde3dc66439a3",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Transaction ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The document (usually application/xml)",
+                        "content": {
+                            "application/xml": {}
+                        }
+                    },
+                    "404": {
+                        "description": "Transaction not found"
+                    },
+                    "409": {
+                        "description": "Not available yet — the e-invoice has not been sent, or the provider is still preparing the document"
+                    },
+                    "502": {
+                        "description": "Provider error"
                     }
                 },
                 "security": [
@@ -2441,289 +2018,6 @@
                         "ApiKeyAuth": []
                     }
                 ]
-            }
-        },
-        "/compliance/e-reporting-request": {
-            "post": {
-                "tags": [
-                    "Compliance"
-                ],
-                "summary": "Request activation of the E-Reporting feature",
-                "description": "Submits an activation request for the E-Reporting feature. Intentionally NOT gated by the compliance access middleware, so customers without the feature can request it. The authenticated user's name/email are used as identity; body values are fallbacks only.",
-                "operationId": "05eec6d3afa30f0dc4df8ae888423c6a",
-                "requestBody": {
-                    "required": false,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "properties": {
-                                    "name": {
-                                        "type": "string",
-                                        "maxLength": 255,
-                                        "nullable": true
-                                    },
-                                    "email": {
-                                        "description": "Fallback if the authenticated user has no email",
-                                        "type": "string",
-                                        "format": "email",
-                                        "maxLength": 255,
-                                        "nullable": true
-                                    },
-                                    "company": {
-                                        "type": "string",
-                                        "maxLength": 255,
-                                        "nullable": true
-                                    },
-                                    "phone": {
-                                        "type": "string",
-                                        "maxLength": 64,
-                                        "nullable": true
-                                    },
-                                    "message": {
-                                        "type": "string",
-                                        "maxLength": 5000,
-                                        "nullable": true
-                                    },
-                                    "language": {
-                                        "type": "string",
-                                        "example": "en",
-                                        "nullable": true
-                                    },
-                                    "service": {
-                                        "type": "string",
-                                        "enum": [
-                                            "e_reporting",
-                                            "e_invoicing"
-                                        ],
-                                        "nullable": true
-                                    },
-                                    "countries": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "string",
-                                            "example": "NO"
-                                        },
-                                        "nullable": true
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Request stored and forwarded to the team"
-                    },
-                    "422": {
-                        "description": "Validation failed / email missing"
-                    }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
-            }
-        },
-        "/smart-enrichment-request": {
-            "post": {
-                "tags": [
-                    "Smart Enrichment"
-                ],
-                "summary": "Request access to the Smart Enrichment feature",
-                "description": "Submits an access request for the Smart Enrichment (reverse VAT lookup) feature. Intentionally NOT gated by the smart_enrichment access middleware, so customers without the feature can request it. The authenticated user's name/email are used as identity; body values are fallbacks only.",
-                "operationId": "ef2628f239a98ead8cfbaeba25b7940c",
-                "requestBody": {
-                    "required": false,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "properties": {
-                                    "name": {
-                                        "type": "string",
-                                        "maxLength": 255,
-                                        "nullable": true
-                                    },
-                                    "email": {
-                                        "description": "Fallback if the authenticated user has no email",
-                                        "type": "string",
-                                        "format": "email",
-                                        "maxLength": 255,
-                                        "nullable": true
-                                    },
-                                    "company": {
-                                        "type": "string",
-                                        "maxLength": 255,
-                                        "nullable": true
-                                    },
-                                    "phone": {
-                                        "type": "string",
-                                        "maxLength": 64,
-                                        "nullable": true
-                                    },
-                                    "message": {
-                                        "type": "string",
-                                        "maxLength": 5000,
-                                        "nullable": true
-                                    },
-                                    "language": {
-                                        "type": "string",
-                                        "example": "en",
-                                        "nullable": true
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Request stored and forwarded to the team"
-                    },
-                    "422": {
-                        "description": "Validation failed / email missing"
-                    }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
-            }
-        },
-        "/v1/partners/shopify/provision": {
-            "post": {
-                "tags": [
-                    "Partners"
-                ],
-                "summary": "Provision or fetch Shopify tenant",
-                "description": "Server-to-server endpoint. Requires partner HMAC signature headers.",
-                "operationId": "024ce11f464f12fd57be04eb5d3d376e",
-                "parameters": [
-                    {
-                        "name": "x-partner-key",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "name": "x-timestamp",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "name": "x-nonce",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "name": "x-signature",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "shop_domain",
-                                    "shop_id"
-                                ],
-                                "properties": {
-                                    "shop_domain": {
-                                        "type": "string",
-                                        "example": "example.myshopify.com"
-                                    },
-                                    "shop_id": {
-                                        "type": "integer",
-                                        "format": "int64",
-                                        "example": 1234567890
-                                    },
-                                    "owner_email": {
-                                        "type": "string",
-                                        "example": "owner@example.com",
-                                        "nullable": true
-                                    },
-                                    "country_code": {
-                                        "type": "string",
-                                        "example": "AT",
-                                        "nullable": true
-                                    },
-                                    "locale": {
-                                        "type": "string",
-                                        "example": "de-AT",
-                                        "nullable": true
-                                    },
-                                    "app_installation_id": {
-                                        "type": "string",
-                                        "example": "gid://shopify/AppInstallation/123",
-                                        "nullable": true
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Provisioned"
-                    },
-                    "400": {
-                        "description": "Invalid payload"
-                    },
-                    "401": {
-                        "description": "Invalid signature"
-                    },
-                    "403": {
-                        "description": "Forbidden"
-                    },
-                    "409": {
-                        "description": "Shop mismatch"
-                    },
-                    "429": {
-                        "description": "Rate limited"
-                    }
-                }
-            }
-        },
-        "/v1/partners/shopify/rotate-secret": {
-            "post": {
-                "tags": [
-                    "Partners"
-                ],
-                "summary": "Rotate Shopify tenant OAuth secret",
-                "description": "Server-to-server endpoint. Requires partner HMAC signature headers.",
-                "operationId": "f91ad037238a0be2194b386b7820627a",
-                "responses": {
-                    "200": {
-                        "description": "Secret rotated"
-                    },
-                    "400": {
-                        "description": "Invalid payload"
-                    },
-                    "401": {
-                        "description": "Invalid signature"
-                    },
-                    "404": {
-                        "description": "Shop not found"
-                    }
-                }
             }
         },
         "/v1/reports": {
@@ -3478,7 +2772,7 @@
                                                     "nullable": true
                                                 },
                                                 "mode": {
-                                                    "description": "Per-row search mode; overrides the batch-level `mode`.",
+                                                    "description": "Per-row search mode; overrides the batch-level `mode`. A `complex` row counts as several checks (see `deepVerifyChecks` in GET /v1/smart-enrichment/usage, default 2).",
                                                     "type": "string",
                                                     "enum": [
                                                         "default",
@@ -3491,7 +2785,7 @@
                                         }
                                     },
                                     "mode": {
-                                        "description": "Search mode for every row in the batch. `default` searches with Gemini and consults Perplexity only when nothing is found. `complex` runs both providers from the start and cross-checks them — higher hit rate on hard lookups, higher cost per lookup.",
+                                        "description": "Search mode for every row in the batch. `default` (Smart Search) runs one AI research pass and a second only when nothing is found. `complex` (Deep Verify) runs two independent research passes from the start and cross-checks them — higher hit rate on hard lookups. Every company counts as one check, found or not; a `complex` row counts as `deepVerifyChecks` checks (GET /v1/smart-enrichment/usage, default 2).",
                                         "type": "string",
                                         "enum": [
                                             "default",
@@ -3552,7 +2846,7 @@
                     "Smart Enrichment"
                 ],
                 "summary": "Quota usage",
-                "description": "Returns the current billing-period Smart Enrichment usage: matches used, the included monthly allowance, remaining included matches, the per-match overage price, and the optional hard cap. Usage is counted in successful matches.",
+                "description": "Returns the current billing-period Smart Enrichment usage: checks used, the included monthly allowance, remaining included checks, the per-check overage price, and the optional hard cap. Every checked company counts as one check, whether a VAT number was found or not; `found` shows how many of them returned a VAT number.",
                 "operationId": "50170e74c115486eebba3beb914e88d8",
                 "responses": {
                     "200": {
@@ -3566,8 +2860,19 @@
                                             "example": "2026-06"
                                         },
                                         "used": {
+                                            "description": "Checks this period (every checked company, found or not)",
                                             "type": "integer",
                                             "example": 312
+                                        },
+                                        "found": {
+                                            "description": "VAT numbers found this period",
+                                            "type": "integer",
+                                            "example": 248
+                                        },
+                                        "deepVerifyChecks": {
+                                            "description": "Checks one Deep Verify (mode=complex) lookup uses per company",
+                                            "type": "integer",
+                                            "example": 2
                                         },
                                         "included": {
                                             "type": "integer",
@@ -3587,7 +2892,7 @@
                                             "example": 0.08
                                         },
                                         "overageAmount": {
-                                            "description": "Amount due this period (overage matches × price)",
+                                            "description": "Amount due this period (overage checks × price)",
                                             "type": "number",
                                             "format": "float",
                                             "example": 0.96
@@ -3595,6 +2900,41 @@
                                         "hardCap": {
                                             "type": "integer",
                                             "example": null,
+                                            "nullable": true
+                                        },
+                                        "trial": {
+                                            "description": "Free start credit, present only while the account is on one. Once it is used up, new lookups answer 429 (code smart_enrichment_trial_exhausted).",
+                                            "properties": {
+                                                "credits": {
+                                                    "type": "integer",
+                                                    "example": 10
+                                                },
+                                                "used": {
+                                                    "description": "Checks so far (found or not)",
+                                                    "type": "integer",
+                                                    "example": 3
+                                                },
+                                                "reserved": {
+                                                    "description": "Rows of running lookups, reserved until they are checked",
+                                                    "type": "integer",
+                                                    "example": 2
+                                                },
+                                                "remaining": {
+                                                    "type": "integer",
+                                                    "example": 5
+                                                },
+                                                "validUntil": {
+                                                    "type": "string",
+                                                    "format": "date",
+                                                    "example": "2026-11-30",
+                                                    "nullable": true
+                                                },
+                                                "exhausted": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                }
+                                            },
+                                            "type": "object",
                                             "nullable": true
                                         },
                                         "history": {
@@ -3607,6 +2947,7 @@
                                                         "example": "2026-05"
                                                     },
                                                     "matches": {
+                                                        "description": "Checks billed in this period (field name kept for compatibility)",
                                                         "type": "integer",
                                                         "example": 420
                                                     },
@@ -4167,7 +3508,7 @@
                                         "nullable": true
                                     },
                                     "provider": {
-                                        "description": "The VAT provider to use for validation. Possible values: 'fon' (Fon), 'vies' (Vies), 'france_vat' (France VAT), 'anaf' (ANAF), 'uk_hmrc' (UK HMRC), 'ai_search' (AI Search), 'fon_vies_ai_search' (Fon + Vies + AI Search), 'uk_hmrc_ai_search' (UK HMRC + AI Search), 'fon_ai_search' (Fon + AI Search), 'fon_vies' (Fon + Vies), 'vies_ai_search' (Vies + AI Search). Default is null.",
+                                        "description": "The VAT provider to use for validation. Possible values: 'fon' (Fon), 'vies' (Vies), 'france_vat' (France VAT), 'anaf' (ANAF), 'uk_hmrc' (UK HMRC), 'no_brreg' (Norwegian Brønnøysund register, for NO numbers), 'ch_uid' (Swiss UID register, for CHE numbers), 'ai_search' (AI Search), 'fon_vies_ai_search' (Fon + Vies + AI Search), 'uk_hmrc_ai_search' (UK HMRC + AI Search), 'no_brreg_ai_search' (Brønnøysund + AI Search), 'ch_uid_ai_search' (UID register + AI Search), 'fon_ai_search' (Fon + AI Search), 'fon_vies' (Fon + Vies), 'vies_ai_search' (Vies + AI Search). Default is null.",
                                         "type": "string",
                                         "example": "vies"
                                     }
@@ -4248,6 +3589,9 @@
                     "400": {
                         "description": "Invalid input"
                     },
+                    "422": {
+                        "description": "Invalid VAT number: wrong format, failing check digit or unsupported country. The error message names the reason."
+                    },
                     "500": {
                         "description": "Internal Server Error"
                     }
@@ -4294,7 +3638,7 @@
                                         }
                                     },
                                     "provider": {
-                                        "description": "The VAT provider to use for validation. Possible values: 'fon' (Fon), 'vies' (Vies), 'france_vat' (France VAT), 'anaf' (ANAF), 'uk_hmrc' (UK HMRC), 'ai_search' (AI Search), 'fon_vies_ai_search' (Fon + Vies + AI Search), 'uk_hmrc_ai_search' (UK HMRC + AI Search), 'fon_ai_search' (Fon + AI Search), 'fon_vies' (Fon + Vies), 'vies_ai_search' (Vies + AI Search). Default is null.",
+                                        "description": "The VAT provider to use for validation. Possible values: 'fon' (Fon), 'vies' (Vies), 'france_vat' (France VAT), 'anaf' (ANAF), 'uk_hmrc' (UK HMRC), 'no_brreg' (Norwegian Brønnøysund register, for NO numbers), 'ch_uid' (Swiss UID register, for CHE numbers), 'ai_search' (AI Search), 'fon_vies_ai_search' (Fon + Vies + AI Search), 'uk_hmrc_ai_search' (UK HMRC + AI Search), 'no_brreg_ai_search' (Brønnøysund + AI Search), 'ch_uid_ai_search' (UID register + AI Search), 'fon_ai_search' (Fon + AI Search), 'fon_vies' (Fon + Vies), 'vies_ai_search' (Vies + AI Search). Default is null.",
                                         "type": "string",
                                         "example": "vies"
                                     }
@@ -4320,6 +3664,9 @@
                     },
                     "400": {
                         "description": "Invalid input"
+                    },
+                    "422": {
+                        "description": "Invalid VAT number: wrong format, failing check digit or unsupported country. The error message names the reason."
                     },
                     "500": {
                         "description": "Internal Server Error"
@@ -4353,7 +3700,7 @@
                                     "vat_uid": {
                                         "description": "The VAT UID to be validated",
                                         "type": "string",
-                                        "maxLength": 15,
+                                        "maxLength": 20,
                                         "example": "ATU12345678"
                                     }
                                 },
@@ -5422,7 +4769,7 @@
                     "Webhooks"
                 ],
                 "summary": "Create a webhook endpoint",
-                "description": "Registers a new HTTPS endpoint. The signing **secret** is returned **once** in this response — store it securely. It will not be visible again via the API.",
+                "description": "Registers a new HTTPS endpoint. Set `signing_enabled` to have every request signed with a per-endpoint secret (`Taxora-Signature` header, HMAC-SHA256). The secret is returned in this response and can be revealed again later via `GET /v1/webhooks/{id}/signing/secret`.",
                 "operationId": "41ce50fb0d496d307346c5aa76166bb2",
                 "requestBody": {
                     "required": true,
@@ -5449,7 +4796,9 @@
                                                 "vat.validated",
                                                 "vat.state_changed",
                                                 "compliance.ledger.state_changed",
-                                                "compliance.transaction.state_changed"
+                                                "compliance.transaction.state_changed",
+                                                "enrichment.completed",
+                                                "enrichment.updated"
                                             ]
                                         },
                                         "example": [
@@ -5474,7 +4823,7 @@
                 },
                 "responses": {
                     "201": {
-                        "description": "Endpoint created. The secret is only returned here.",
+                        "description": "Endpoint created.",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -5488,10 +4837,11 @@
                                                 "endpoint": {
                                                     "$ref": "#/components/schemas/WebhookEndpoint"
                                                 },
-                                                "secret": {
-                                                    "description": "64-character hex secret used to verify the X-Taxora-Signature header on incoming webhook requests. Save this — it will never be shown again.",
+                                                "signing_secret": {
+                                                    "description": "Signing secret (only when signing_enabled was true), used to verify the Taxora-Signature header.",
                                                     "type": "string",
-                                                    "example": "a3f8...d2c1"
+                                                    "example": "whsec_3b2kq0J8Xn1o0m7dJcF4l7Qp9sN2aV5eW6rT8yU1iO0",
+                                                    "nullable": true
                                                 }
                                             },
                                             "type": "object"
@@ -5605,7 +4955,9 @@
                                                 "vat.validated",
                                                 "vat.state_changed",
                                                 "compliance.ledger.state_changed",
-                                                "compliance.transaction.state_changed"
+                                                "compliance.transaction.state_changed",
+                                                "enrichment.completed",
+                                                "enrichment.updated"
                                             ]
                                         }
                                     },
@@ -5832,6 +5184,245 @@
                     }
                 ]
             }
+        },
+        "/v1/webhooks/{id}/signing/enable": {
+            "post": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Enable signing",
+                "description": "Turns on HMAC signing for this endpoint and returns the signing secret. Idempotent — an endpoint that is already signed keeps (and returns) its current secret. From now on every request carries `Taxora-Signature: t=<unix>,v1=<hex>`.",
+                "operationId": "3ad266a7e2da4cdcaa78fbc8ee0ef662",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Signing enabled",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/WebhookSigningSecret"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not authorized"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/webhooks/{id}/signing/disable": {
+            "post": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Disable signing",
+                "description": "Turns off signing and destroys all secrets of this endpoint. Requests are sent without `Taxora-Signature` afterwards; enabling again issues a new secret.",
+                "operationId": "7b597e4ee009e96b002ccf2e1672089d",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Signing disabled",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/WebhookEndpoint"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not authorized"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/webhooks/{id}/signing/secret": {
+            "get": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Reveal the signing secret",
+                "description": "Returns the current signing secret of this endpoint.",
+                "operationId": "44eae710bde179898df6c3c3a7c6f65d",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Current secret",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/WebhookSigningSecret"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not authorized"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    },
+                    "409": {
+                        "description": "Signing is not enabled for this endpoint"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/webhooks/{id}/signing/rotate": {
+            "post": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Rotate the signing secret",
+                "description": "Issues a new signing secret. The previous secret keeps signing for `expires_in_hours` (default 24, max 168): during that window each request carries two `v1=` signatures, so you can deploy the new secret without dropping events. `0` revokes the old secret immediately.",
+                "operationId": "17815c08989d6c1050e772918a794666",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "expires_in_hours": {
+                                        "description": "How long the previous secret stays valid",
+                                        "type": "integer",
+                                        "default": 24,
+                                        "maximum": 168,
+                                        "minimum": 0
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "New secret",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/WebhookSigningSecret"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Validation failed"
+                    },
+                    "401": {
+                        "description": "Not authorized"
+                    },
+                    "404": {
+                        "description": "Not found"
+                    },
+                    "409": {
+                        "description": "Signing is not enabled for this endpoint"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
         }
     },
     "components": {
@@ -5982,17 +5573,25 @@
                         "nullable": true
                     },
                     "providerVerdicts": {
-                        "description": "What each AI provider independently concluded. Populated when more than one provider searched (complex mode, or a fallback). Two providers reporting the same vatNumber is the strongest confirmation this layer produces.",
+                        "description": "What each independent research pass concluded. Populated when more than one pass ran (complex mode, or a fallback). Two passes reporting the same vatNumber is the strongest confirmation this layer produces.",
                         "type": "array",
                         "items": {
                             "properties": {
                                 "provider": {
+                                    "description": "The kind of research pass.",
                                     "type": "string",
-                                    "example": "perplexity"
+                                    "enum": [
+                                        "ai_search",
+                                        "ai_search_independent",
+                                        "source_research",
+                                        "address_correction"
+                                    ],
+                                    "example": "source_research"
                                 },
                                 "model": {
+                                    "description": "Always null; kept for compatibility.",
                                     "type": "string",
-                                    "example": "sonar-pro",
+                                    "example": null,
                                     "nullable": true
                                 },
                                 "status": {
@@ -6073,6 +5672,30 @@
                         },
                         "type": "object",
                         "nullable": true
+                    },
+                    "rejectedCandidates": {
+                        "description": "Only on `not_found`: VAT numbers the research did name but the official check threw out. `vat_invalid` = the tax authority reports the number as not (or no longer) valid; `name_mismatch` = valid, but registered to a different company; `unbound`/`unverified` = could not be tied to the company or could not be checked.",
+                        "type": "array",
+                        "items": {
+                            "properties": {
+                                "vatNumber": {
+                                    "type": "string",
+                                    "example": "DE176664507"
+                                },
+                                "reason": {
+                                    "type": "string",
+                                    "enum": [
+                                        "vat_invalid",
+                                        "name_mismatch",
+                                        "unbound",
+                                        "unverified",
+                                        "rejected"
+                                    ],
+                                    "example": "vat_invalid"
+                                }
+                            },
+                            "type": "object"
+                        }
                     }
                 },
                 "type": "object"
@@ -6178,6 +5801,27 @@
                         "type": "string",
                         "format": "date-time",
                         "nullable": true
+                    },
+                    "startedAt": {
+                        "description": "When processing began; null while still queued.",
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "queueSeconds": {
+                        "description": "Seconds between submission and the start of processing.",
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "runSeconds": {
+                        "description": "Seconds spent researching and confirming.",
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "durationSeconds": {
+                        "description": "Total seconds from submission to result; null until finished.",
+                        "type": "integer",
+                        "nullable": true
                     }
                 },
                 "type": "object"
@@ -6201,7 +5845,9 @@
                                 "vat.validated",
                                 "vat.state_changed",
                                 "compliance.ledger.state_changed",
-                                "compliance.transaction.state_changed"
+                                "compliance.transaction.state_changed",
+                                "enrichment.completed",
+                                "enrichment.updated"
                             ]
                         },
                         "example": [
@@ -6218,6 +5864,9 @@
                         "example": "Production webhook",
                         "nullable": true
                     },
+                    "signing": {
+                        "$ref": "#/components/schemas/WebhookSigning"
+                    },
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
@@ -6227,6 +5876,47 @@
                         "type": "string",
                         "format": "date-time",
                         "example": "2026-05-20T10:00:00+00:00"
+                    }
+                },
+                "type": "object"
+            },
+            "WebhookSigning": {
+                "description": "Opt-in HMAC signing state. Never contains the secret — use GET /v1/webhooks/{id}/signing/secret.",
+                "properties": {
+                    "enabled": {
+                        "description": "When true every request carries a Taxora-Signature header",
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "secret_hint": {
+                        "description": "Last 4 characters of the current secret",
+                        "type": "string",
+                        "example": "x9Qa",
+                        "nullable": true
+                    },
+                    "secret_created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "previous_secret_expires_at": {
+                        "description": "Set while a rotated-out secret still signs (rotation grace period)",
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
+            "WebhookSigningSecret": {
+                "properties": {
+                    "secret": {
+                        "description": "HMAC-SHA256 key. Use the full string including the whsec_ prefix.",
+                        "type": "string",
+                        "example": "whsec_3b2kq0J8Xn1o0m7dJcF4l7Qp9sN2aV5eW6rT8yU1iO0"
+                    },
+                    "signing": {
+                        "$ref": "#/components/schemas/WebhookSigning"
                     }
                 },
                 "type": "object"
@@ -7181,40 +6871,36 @@
             "description": "API Endpoints for managing companies"
         },
         {
+            "name": "Authentication",
+            "description": "Obtain and refresh the Bearer token used by session-bound endpoints."
+        },
+        {
+            "name": "Billing",
+            "description": "Read-only usage summaries for billable modules."
+        },
+        {
+            "name": "Compliance",
+            "description": "E-reporting and e-invoicing: enrol a country, record and submit transactions, read tax reports, and look up companies in national registers or Peppol."
+        },
+        {
+            "name": "Reports",
+            "description": "Scheduled report jobs and their generated runs."
+        },
+        {
+            "name": "Smart Enrichment",
+            "description": "Reverse VAT lookup: find the VAT number for a company name and country. Jobs run asynchronously; poll the job or use the SDK helper to wait for completion."
+        },
+        {
+            "name": "Tenant",
+            "description": "Entitlements of the authenticated tenant."
+        },
+        {
             "name": "VAT",
             "description": "Endpoints related to VAT operations. Sandbox & development environment users can reference the VatSandboxTestData schema for ready-to-use test VAT UIDs."
         },
         {
             "name": "Webhooks",
             "description": "Configure outgoing webhook endpoints and inspect delivery history"
-        },
-        {
-            "name": "Authentication",
-            "description": "Authentication"
-        },
-        {
-            "name": "Billing",
-            "description": "Billing"
-        },
-        {
-            "name": "Compliance",
-            "description": "Compliance"
-        },
-        {
-            "name": "Smart Enrichment",
-            "description": "Smart Enrichment"
-        },
-        {
-            "name": "Partners",
-            "description": "Partners"
-        },
-        {
-            "name": "Reports",
-            "description": "Reports"
-        },
-        {
-            "name": "Tenant",
-            "description": "Tenant"
         }
     ],
     "security": [

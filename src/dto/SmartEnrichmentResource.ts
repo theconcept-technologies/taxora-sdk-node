@@ -1,4 +1,8 @@
 import { type SmartEnrichmentMode, toSmartEnrichmentMode } from '../enums/SmartEnrichmentMode.js';
+import {
+  type SmartEnrichmentRejectionReason,
+  toSmartEnrichmentRejectionReason,
+} from '../enums/SmartEnrichmentRejectionReason.js';
 import { type SmartEnrichmentStatus, toSmartEnrichmentStatus } from '../enums/SmartEnrichmentStatus.js';
 
 /** What one AI provider independently concluded, when more than one searched. */
@@ -31,6 +35,33 @@ export interface SmartEnrichmentAddressQuality {
   warnings: string[];
 }
 
+/** A VAT number the research named, but the official check threw out. */
+export interface SmartEnrichmentRejectedCandidate {
+  vatNumber: string;
+  reason: SmartEnrichmentRejectionReason;
+}
+
+function toRejectedCandidates(value: unknown): SmartEnrichmentRejectedCandidate[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const candidates: SmartEnrichmentRejectedCandidate[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) {
+      continue;
+    }
+    const record = entry as Record<string, unknown>;
+    const vatNumber = typeof record['vatNumber'] === 'string' ? record['vatNumber'].trim() : '';
+    // An entry without a number carries nothing to report.
+    if (vatNumber === '') {
+      continue;
+    }
+    candidates.push({ vatNumber, reason: toSmartEnrichmentRejectionReason(record['reason']) });
+  }
+  return candidates;
+}
+
 /**
  * Result of resolving one reverse-VAT lookup (company name + address → VAT + confidence).
  * Mirrors the API response item shape (camelCase keys).
@@ -55,7 +86,18 @@ export class SmartEnrichmentResource {
      */
     public readonly providerVerdicts: SmartEnrichmentProviderVerdict[] = [],
     public readonly addressQuality: SmartEnrichmentAddressQuality | undefined = undefined,
+    /**
+     * Only on `not_found`: VAT numbers the research DID find but the official check threw out —
+     * e.g. one the tax authority reports as invalid. Lets you tell "found one, it is invalid"
+     * apart from "found nothing". Empty for every other status.
+     */
+    public readonly rejectedCandidates: SmartEnrichmentRejectedCandidate[] = [],
   ) {}
+
+  /** True when a VAT number was found but rejected by the official check. */
+  hasRejectedCandidates(): boolean {
+    return this.rejectedCandidates.length > 0;
+  }
 
   static fromArray(data: Record<string, unknown>): SmartEnrichmentResource {
     const str = (key: string): string | undefined => {
@@ -84,6 +126,7 @@ export class SmartEnrichmentResource {
         ? (verdicts.filter((v) => typeof v === 'object' && v !== null) as SmartEnrichmentProviderVerdict[])
         : [],
       typeof quality === 'object' && quality !== null ? (quality as SmartEnrichmentAddressQuality) : undefined,
+      toRejectedCandidates(data['rejectedCandidates']),
     );
   }
 
@@ -100,6 +143,7 @@ export class SmartEnrichmentResource {
       mode: this.mode ?? null,
       providerVerdicts: this.providerVerdicts,
       addressQuality: this.addressQuality ?? null,
+      rejectedCandidates: this.rejectedCandidates.map((c) => ({ vatNumber: c.vatNumber, reason: c.reason })),
     };
   }
 }

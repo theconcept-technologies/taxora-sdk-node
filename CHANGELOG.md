@@ -2,6 +2,21 @@
 
 All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Smart Enrichment: rejected VAT candidates.** `SmartEnrichmentResource.rejectedCandidates` lists VAT numbers
+  a `not_found` lookup DID find but the official check threw out, each with a `reason`
+  (`SmartEnrichmentRejectionReason`: `vat_invalid`, `name_mismatch`, `unbound`, `unverified`, `rejected`;
+  unknown values map to `unknown`). Lets you tell "found one, it is invalid" apart from "found nothing".
+  Plus `hasRejectedCandidates()`, `toSmartEnrichmentRejectionReason()` and
+  `describeSmartEnrichmentRejectionReason()`.
+
+### Changed
+
+- Bundled OpenAPI specs (`resources/`) refreshed from the current API.
+
 ## [1.3.0] — 2026-10-13
 
 ### Added

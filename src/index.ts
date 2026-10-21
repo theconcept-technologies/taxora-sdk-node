@@ -50,7 +50,11 @@ export { VatResource } from './dto/VatResource.js';
 export { VatCollection } from './dto/VatCollection.js';
 export { VatCertificateExport } from './dto/VatCertificateExport.js';
 export { SmartEnrichmentResource } from './dto/SmartEnrichmentResource.js';
-export type { SmartEnrichmentProviderVerdict, SmartEnrichmentAddressQuality } from './dto/SmartEnrichmentResource.js';
+export type {
+  SmartEnrichmentProviderVerdict,
+  SmartEnrichmentAddressQuality,
+  SmartEnrichmentRejectedCandidate,
+} from './dto/SmartEnrichmentResource.js';
 export { SmartEnrichmentJob } from './dto/SmartEnrichmentJob.js';
 export { SmartEnrichmentHistoryRow } from './dto/SmartEnrichmentHistoryRow.js';
 export type { SmartEnrichmentHistoryInput } from './dto/SmartEnrichmentHistoryRow.js';
@@ -109,6 +113,11 @@ export {
   toSmartEnrichmentMode,
   describeSmartEnrichmentMode,
 } from './enums/SmartEnrichmentMode.js';
+export {
+  SmartEnrichmentRejectionReason,
+  toSmartEnrichmentRejectionReason,
+  describeSmartEnrichmentRejectionReason,
+} from './enums/SmartEnrichmentRejectionReason.js';
 export {
   ComplianceEnrollmentStatus,
   toComplianceEnrollmentStatus,

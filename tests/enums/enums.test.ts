@@ -39,6 +39,11 @@ import {
   toComplianceDocumentType,
   describeComplianceDocumentType,
 } from '../../src/enums/ComplianceDocumentType.js';
+import {
+  SmartEnrichmentRejectionReason,
+  toSmartEnrichmentRejectionReason,
+  describeSmartEnrichmentRejectionReason,
+} from '../../src/enums/SmartEnrichmentRejectionReason.js';
 
 describe('Environment', () => {
   it('has SANDBOX and PRODUCTION values', () => {
@@ -251,6 +256,32 @@ describe('ComplianceDocumentType', () => {
   it('describeComplianceDocumentType returns a description for every value', () => {
     for (const type of Object.values(ComplianceDocumentType)) {
       expect(describeComplianceDocumentType(type).length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('SmartEnrichmentRejectionReason', () => {
+  it('has all backend values', () => {
+    expect(Object.values(SmartEnrichmentRejectionReason)).toEqual([
+      'vat_invalid',
+      'name_mismatch',
+      'unbound',
+      'unverified',
+      'rejected',
+      'unknown',
+    ]);
+  });
+
+  it('toSmartEnrichmentRejectionReason coerces tolerantly', () => {
+    expect(toSmartEnrichmentRejectionReason('vat_invalid')).toBe(SmartEnrichmentRejectionReason.VAT_INVALID);
+    expect(toSmartEnrichmentRejectionReason(' Name_Mismatch ')).toBe(SmartEnrichmentRejectionReason.NAME_MISMATCH);
+    expect(toSmartEnrichmentRejectionReason('some_future_reason')).toBe(SmartEnrichmentRejectionReason.UNKNOWN);
+    expect(toSmartEnrichmentRejectionReason(undefined)).toBe(SmartEnrichmentRejectionReason.UNKNOWN);
+  });
+
+  it('describeSmartEnrichmentRejectionReason returns a description for every value', () => {
+    for (const reason of Object.values(SmartEnrichmentRejectionReason)) {
+      expect(describeSmartEnrichmentRejectionReason(reason).length).toBeGreaterThan(0);
     }
   });
 });

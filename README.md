@@ -363,6 +363,13 @@ if (quality && quality.warnings.length > 0) {
   console.log(quality.warnings.join(', '), '→', quality.derivedPlace);
 }
 
+// 'not_found' doesn't always mean nothing turned up. When the research found a VAT number but
+// the official check threw it out (e.g. the tax authority reports it as invalid), the number
+// and the reason are in `rejectedCandidates` — no need to re-check it yourself.
+for (const candidate of result?.rejectedCandidates ?? []) {
+  console.log(candidate.vatNumber, candidate.reason); // e.g. 'vat_invalid'
+}
+
 // Bulk lookup (always async → webhook + polling)
 // The batch-level mode applies to every row; a row carrying its own `mode` overrides it,
 // so you can pay for 'complex' on just the rows that need it.
