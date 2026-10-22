@@ -5562,6 +5562,19 @@
                         "example": "corpus",
                         "nullable": true
                     },
+                    "sourceUrl": {
+                        "description": "Only on `found`: the web page the VAT number was read from — usually the company's own Impressum / legal notice. Null when the number came from our own data or a register.",
+                        "type": "string",
+                        "format": "uri",
+                        "example": "https://kawelke-abschlepp.de/Impressum",
+                        "nullable": true
+                    },
+                    "registeredOwner": {
+                        "description": "Only on `found`, when the tax authority has the VAT ID under a PERSON rather than the trading name — typical for a German sole proprietorship (e.K.). The number was confirmed for that owner, who is named in the company's Impressum; `matchedCompanyName` stays the trading name.",
+                        "type": "string",
+                        "example": "Kevin Seibel",
+                        "nullable": true
+                    },
                     "mode": {
                         "description": "The search mode this lookup actually ran in.",
                         "type": "string",

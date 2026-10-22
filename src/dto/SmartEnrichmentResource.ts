@@ -92,6 +92,17 @@ export class SmartEnrichmentResource {
      * apart from "found nothing". Empty for every other status.
      */
     public readonly rejectedCandidates: SmartEnrichmentRejectedCandidate[] = [],
+    /**
+     * Only on `found`: the web page the VAT number was read from — usually the company's own
+     * Impressum / legal notice. Undefined when it came from Taxora's own data or a register.
+     */
+    public readonly sourceUrl: string | undefined = undefined,
+    /**
+     * Only on `found`: the PERSON the tax authority has the VAT ID under, when that is not the
+     * trading name — typical for a German sole proprietorship (e.K.). `matchedCompanyName` stays
+     * the trading name.
+     */
+    public readonly registeredOwner: string | undefined = undefined,
   ) {}
 
   /** True when a VAT number was found but rejected by the official check. */
@@ -104,6 +115,12 @@ export class SmartEnrichmentResource {
       const v = data[key];
       return typeof v === 'string' ? v : undefined;
     };
+    const text = (key: string): string | undefined => {
+      const v = str(key)?.trim();
+      return v ? v : undefined;
+    };
+    // Only an http(s) address — anything else in the field is not a link worth following.
+    const url = text('sourceUrl');
     const num = (key: string): number | undefined => {
       const v = data[key];
       return typeof v === 'number' ? v : undefined;
@@ -127,6 +144,8 @@ export class SmartEnrichmentResource {
         : [],
       typeof quality === 'object' && quality !== null ? (quality as SmartEnrichmentAddressQuality) : undefined,
       toRejectedCandidates(data['rejectedCandidates']),
+      url && /^https?:\/\/\S+$/i.test(url) ? url : undefined,
+      text('registeredOwner'),
     );
   }
 
@@ -144,6 +163,8 @@ export class SmartEnrichmentResource {
       providerVerdicts: this.providerVerdicts,
       addressQuality: this.addressQuality ?? null,
       rejectedCandidates: this.rejectedCandidates.map((c) => ({ vatNumber: c.vatNumber, reason: c.reason })),
+      sourceUrl: this.sourceUrl ?? null,
+      registeredOwner: this.registeredOwner ?? null,
     };
   }
 }

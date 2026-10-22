@@ -845,6 +845,46 @@ describe('SmartEnrichmentEndpoint search mode', () => {
     ]);
   });
 
+  it('exposes the source page and the registered owner of a found number', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        jobId: 'job-owner',
+        status: 'found',
+        vatNumber: 'DE313050507',
+        matchedCompanyName: 'Abschleppdienst Kawelke e.K.',
+        country: 'DE',
+        sourceUrl: 'https://kawelke-abschlepp.de/Impressum',
+        registeredOwner: 'Kevin Seibel',
+      }),
+    ]);
+
+    const result = (await endpoint.lookup({ companyName: 'Abschleppdienst Kawelke e.K.', country: 'DE' })).result();
+
+    expect(result?.sourceUrl).toBe('https://kawelke-abschlepp.de/Impressum');
+    expect(result?.registeredOwner).toBe('Kevin Seibel');
+    expect(result?.matchedCompanyName).toBe('Abschleppdienst Kawelke e.K.');
+    expect(result?.toArray()['sourceUrl']).toBe('https://kawelke-abschlepp.de/Impressum');
+    expect(result?.toArray()['registeredOwner']).toBe('Kevin Seibel');
+  });
+
+  it('accepts only web addresses as the source page', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        jobId: 'job-bad-url',
+        status: 'found',
+        vatNumber: 'DE313050507',
+        sourceUrl: 'javascript:alert(1)',
+        registeredOwner: '   ',
+      }),
+    ]);
+
+    const result = (await endpoint.lookup({ companyName: 'Example GmbH', country: 'DE' })).result();
+
+    expect(result?.sourceUrl).toBeUndefined();
+    expect(result?.registeredOwner).toBeUndefined();
+    expect(result?.toArray()['sourceUrl']).toBeNull();
+  });
+
   it('defaults rejected candidates to an empty list', async () => {
     const { endpoint } = makeEndpoint([
       SequenceHttpClient.jsonResponse({ jobId: 'job-none', status: 'not_found', rejectedCandidates: null }),

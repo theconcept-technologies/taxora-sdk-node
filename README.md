@@ -363,6 +363,12 @@ if (quality && quality.warnings.length > 0) {
   console.log(quality.warnings.join(', '), '→', quality.derivedPlace);
 }
 
+// Where the number came from, and who it is registered to. `sourceUrl` is the page it was read
+// from (usually the Impressum). `registeredOwner` is set when the tax authority has the VAT ID
+// under a person rather than the trading name — a German e.K. — and confirmed it for them.
+console.log(result?.sourceUrl ?? '—'); // e.g. 'https://example.de/impressum'
+console.log(result?.registeredOwner ?? '—'); // e.g. 'Kevin Seibel'
+
 // 'not_found' doesn't always mean nothing turned up. When the research found a VAT number but
 // the official check threw it out (e.g. the tax authority reports it as invalid), the number
 // and the reason are in `rejectedCandidates` — no need to re-check it yourself.
