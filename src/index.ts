@@ -54,6 +54,7 @@ export type {
   SmartEnrichmentProviderVerdict,
   SmartEnrichmentAddressQuality,
   SmartEnrichmentRejectedCandidate,
+  SmartEnrichmentOfficialAddress,
 } from './dto/SmartEnrichmentResource.js';
 export { SmartEnrichmentJob } from './dto/SmartEnrichmentJob.js';
 export { SmartEnrichmentHistoryRow } from './dto/SmartEnrichmentHistoryRow.js';

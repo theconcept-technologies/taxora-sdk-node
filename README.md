@@ -370,6 +370,17 @@ console.log(result?.sourceUrl ?? '—'); // e.g. 'https://example.de/impressum'
 console.log(result?.sourceUrls.join(', ')); // every page it was found on, main one first
 console.log(result?.registeredOwner ?? '—'); // e.g. 'Kevin Seibel'
 
+// The official VAT check behind a found number. nameMatch 'mismatch' means the register has the
+// number under a different name — another company, unless `registeredOwner` is set (an e.K. filed
+// under its owner): then write officialName / officialAddress into your own records.
+if (result?.nameMismatch()) {
+  console.log(result.officialName, result.officialAddress);
+}
+
+// A page that shows a tax number (Steuernummer) under the VAT ID heading is not a VAT ID:
+// the lookup stays 'not_found' and the number comes back as `taxNumber`.
+console.log(result?.taxNumber ?? '—');
+
 // 'not_found' doesn't always mean nothing turned up. When the research found a VAT number but
 // the official check threw it out (e.g. the tax authority reports it as invalid), the number
 // and the reason are in `rejectedCandidates` — no need to re-check it yourself.

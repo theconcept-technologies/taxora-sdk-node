@@ -2,6 +2,20 @@
 
 All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Smart Enrichment: `taxNumber`** — a domestic tax number (e.g. a German Steuernummer) a company's page shows
+  instead of a VAT ID. It is not a VAT ID; the lookup stays `not_found`.
+- **Smart Enrichment: the official VAT check behind a found number** — `vatValid`, `aiScore`, `nameMatch`
+  (`'ok' | 'mismatch'`, plus `nameMismatch()`), `officialName` and `officialAddress`
+  (`SmartEnrichmentOfficialAddress`). Lets you write the register's name and address back into your records.
+
+### Changed
+
+- Bundled OpenAPI specs (`resources/`) refreshed from the current API.
+
 ## [1.5.0] — 2026-10-22
 
 ### Added

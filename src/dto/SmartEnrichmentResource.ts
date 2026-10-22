@@ -62,6 +62,29 @@ function toRejectedCandidates(value: unknown): SmartEnrichmentRejectedCandidate[
   return candidates;
 }
 
+/** The registered address the official VAT check returned, field by field. */
+export interface SmartEnrichmentOfficialAddress {
+  street?: string;
+  postal_code?: string;
+  city?: string;
+  country?: string;
+}
+
+function toOfficialAddress(value: unknown): SmartEnrichmentOfficialAddress | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const address: SmartEnrichmentOfficialAddress = {};
+  for (const key of ['street', 'postal_code', 'city', 'country'] as const) {
+    const part = typeof record[key] === 'string' ? (record[key] as string).trim() : '';
+    if (part !== '') {
+      address[key] = part;
+    }
+  }
+  return Object.keys(address).length > 0 ? address : undefined;
+}
+
 /**
  * Result of resolving one reverse-VAT lookup (company name + address → VAT + confidence).
  * Mirrors the API response item shape (camelCase keys).
@@ -108,7 +131,30 @@ export class SmartEnrichmentResource {
      * pass that found the same number contributes its page. At most 5.
      */
     public readonly sourceUrls: string[] = [],
+    /**
+     * A domestic tax number (e.g. a German Steuernummer, digits only) the company's own page shows
+     * INSTEAD of a VAT ID — often under the VAT ID heading by mistake. Not a VAT ID.
+     */
+    public readonly taxNumber: string | undefined = undefined,
+    /** Only on `found`: the tax authority's verdict on the number; undefined when no official check ran. */
+    public readonly vatValid: boolean | undefined = undefined,
+    /** Only on `found`: 0–100, the requested name against the register's; undefined when no name was disclosed. */
+    public readonly aiScore: number | undefined = undefined,
+    /**
+     * Only on `found`: 'ok' (name matches the register) or 'mismatch' (it does not — another company,
+     * unless `registeredOwner` is set: then update your record).
+     */
+    public readonly nameMatch: 'ok' | 'mismatch' | undefined = undefined,
+    /** Only on `found`: the name the register has the number under. */
+    public readonly officialName: string | undefined = undefined,
+    /** Only on `found`: the registered address, field by field. */
+    public readonly officialAddress: SmartEnrichmentOfficialAddress | undefined = undefined,
   ) {}
+
+  /** True when the register knows the number under a different name than the one requested. */
+  nameMismatch(): boolean {
+    return this.nameMatch === 'mismatch';
+  }
 
   /** True when a VAT number was found but rejected by the official check. */
   hasRejectedCandidates(): boolean {
@@ -155,6 +201,12 @@ export class SmartEnrichmentResource {
       url && isWebUrl(url) ? url : undefined,
       text('registeredOwner'),
       Array.isArray(urls) ? [...new Set(urls.filter(isWebUrl).map((u) => u.trim()))] : [],
+      text('taxNumber'),
+      typeof data['vatValid'] === 'boolean' ? data['vatValid'] : undefined,
+      num('aiScore'),
+      data['nameMatch'] === 'ok' || data['nameMatch'] === 'mismatch' ? data['nameMatch'] : undefined,
+      text('officialName'),
+      toOfficialAddress(data['officialAddress']),
     );
   }
 
@@ -175,6 +227,12 @@ export class SmartEnrichmentResource {
       sourceUrl: this.sourceUrl ?? null,
       registeredOwner: this.registeredOwner ?? null,
       sourceUrls: this.sourceUrls,
+      taxNumber: this.taxNumber ?? null,
+      vatValid: this.vatValid ?? null,
+      aiScore: this.aiScore ?? null,
+      nameMatch: this.nameMatch ?? null,
+      officialName: this.officialName ?? null,
+      officialAddress: this.officialAddress ?? null,
     };
   }
 }

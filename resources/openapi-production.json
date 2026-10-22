@@ -5534,6 +5534,64 @@
                         "example": "ust_idnr",
                         "nullable": true
                     },
+                    "vatValid": {
+                        "description": "Only on `found`: the tax authority's verdict on the number (FinanzOnline / BZSt / VIES / national registers). Null when no official check ran.",
+                        "type": "boolean",
+                        "example": true,
+                        "nullable": true
+                    },
+                    "aiScore": {
+                        "description": "Only on `found`: 0–100, how well the requested company name matches the name the register has for the number. Null when the register discloses no name (e.g. DE/AT via VIES).",
+                        "type": "number",
+                        "format": "float",
+                        "example": 18,
+                        "nullable": true
+                    },
+                    "nameMatch": {
+                        "description": "Only on `found`: `ok` = the requested name matches the register; `mismatch` = it does not — the number belongs to a different company, unless `registeredOwner` is set (then it is the right business filed under its owner and your record should be updated). Null when no name was disclosed.",
+                        "type": "string",
+                        "enum": [
+                            "ok",
+                            "mismatch"
+                        ],
+                        "example": "mismatch",
+                        "nullable": true
+                    },
+                    "officialName": {
+                        "description": "Only on `found`: the name the register has the number under. Write it into your records when `nameMatch` is `mismatch`.",
+                        "type": "string",
+                        "example": "Seibel Kevin",
+                        "nullable": true
+                    },
+                    "officialAddress": {
+                        "description": "Only on `found`: the registered address the official check returned, field by field. Null where the register discloses none.",
+                        "properties": {
+                            "street": {
+                                "type": "string",
+                                "example": "Beethovenstr. 2"
+                            },
+                            "postal_code": {
+                                "type": "string",
+                                "example": "67258"
+                            },
+                            "city": {
+                                "type": "string",
+                                "example": "Heßheim"
+                            },
+                            "country": {
+                                "type": "string",
+                                "example": "DE"
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "taxNumber": {
+                        "description": "A domestic tax number (e.g. a German Steuernummer, digits only) the company's own page shows INSTEAD of a VAT ID — often printed under the VAT ID heading by mistake. It is not a VAT ID and cannot be used as one; the status stays `not_found` (or `no_vat_exists`). Null when none was seen.",
+                        "type": "string",
+                        "example": "21815953301",
+                        "nullable": true
+                    },
                     "confidence": {
                         "description": "0–100",
                         "type": "number",

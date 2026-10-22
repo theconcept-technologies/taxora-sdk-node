@@ -890,6 +890,62 @@ describe('SmartEnrichmentEndpoint search mode', () => {
     expect(result?.sourceUrls).toEqual(['https://ok.example']);
   });
 
+  it('exposes the official VAT check behind a found number', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        jobId: 'job-check',
+        status: 'found',
+        vatNumber: 'DE313050507',
+        matchedCompanyName: 'Abschleppdienst Kawelke e.K.',
+        registeredOwner: 'Kevin Seibel',
+        vatValid: true,
+        aiScore: 18,
+        nameMatch: 'mismatch',
+        officialName: 'Seibel Kevin',
+        officialAddress: { street: 'Beethovenstr. 2', postal_code: '67258', city: 'Heßheim', country: 'DE', junk: 'x' },
+      }),
+    ]);
+
+    const result = (await endpoint.lookup({ companyName: 'Abschleppdienst Kawelke e.K.', country: 'DE' })).result();
+
+    expect(result?.vatValid).toBe(true);
+    expect(result?.aiScore).toBe(18);
+    expect(result?.nameMismatch()).toBe(true);
+    expect(result?.officialName).toBe('Seibel Kevin');
+    expect(result?.officialAddress).toEqual({
+      street: 'Beethovenstr. 2',
+      postal_code: '67258',
+      city: 'Heßheim',
+      country: 'DE',
+    });
+    expect(result?.toArray()['nameMatch']).toBe('mismatch');
+  });
+
+  it('exposes a tax number found instead of a VAT ID', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        jobId: 'job-tax',
+        status: 'not_found',
+        vatNumber: null,
+        taxNumber: '21815953301',
+        vatValid: null,
+        nameMatch: 'something-else',
+        officialAddress: 'not-an-object',
+      }),
+    ]);
+
+    const result = (
+      await endpoint.lookup({ companyName: 'Fritz Schiller Fußbodenverlegung OHG', country: 'DE' })
+    ).result();
+
+    expect(result?.taxNumber).toBe('21815953301');
+    expect(result?.vatValid).toBeUndefined();
+    expect(result?.nameMatch).toBeUndefined();
+    expect(result?.nameMismatch()).toBe(false);
+    expect(result?.officialAddress).toBeUndefined();
+    expect(result?.toArray()['taxNumber']).toBe('21815953301');
+  });
+
   it('defaults rejected candidates to an empty list', async () => {
     const { endpoint } = makeEndpoint([
       SequenceHttpClient.jsonResponse({ jobId: 'job-none', status: 'not_found', rejectedCandidates: null }),
