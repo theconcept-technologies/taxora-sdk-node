@@ -854,6 +854,7 @@ describe('SmartEnrichmentEndpoint search mode', () => {
         matchedCompanyName: 'Abschleppdienst Kawelke e.K.',
         country: 'DE',
         sourceUrl: 'https://kawelke-abschlepp.de/Impressum',
+        sourceUrls: ['https://kawelke-abschlepp.de/Impressum', 'https://www.northdata.de/Kawelke'],
         registeredOwner: 'Kevin Seibel',
       }),
     ]);
@@ -865,6 +866,8 @@ describe('SmartEnrichmentEndpoint search mode', () => {
     expect(result?.matchedCompanyName).toBe('Abschleppdienst Kawelke e.K.');
     expect(result?.toArray()['sourceUrl']).toBe('https://kawelke-abschlepp.de/Impressum');
     expect(result?.toArray()['registeredOwner']).toBe('Kevin Seibel');
+    expect(result?.sourceUrls).toEqual(['https://kawelke-abschlepp.de/Impressum', 'https://www.northdata.de/Kawelke']);
+    expect(result?.toArray()['sourceUrls']).toEqual(result?.sourceUrls);
   });
 
   it('accepts only web addresses as the source page', async () => {
@@ -874,6 +877,7 @@ describe('SmartEnrichmentEndpoint search mode', () => {
         status: 'found',
         vatNumber: 'DE313050507',
         sourceUrl: 'javascript:alert(1)',
+        sourceUrls: ['javascript:alert(1)', 'https://ok.example', 'https://ok.example', 42, null],
         registeredOwner: '   ',
       }),
     ]);
@@ -883,6 +887,7 @@ describe('SmartEnrichmentEndpoint search mode', () => {
     expect(result?.sourceUrl).toBeUndefined();
     expect(result?.registeredOwner).toBeUndefined();
     expect(result?.toArray()['sourceUrl']).toBeNull();
+    expect(result?.sourceUrls).toEqual(['https://ok.example']);
   });
 
   it('defaults rejected candidates to an empty list', async () => {

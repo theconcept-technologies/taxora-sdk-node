@@ -9,7 +9,8 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 - **Smart Enrichment: `sourceUrl` and `registeredOwner`** on `SmartEnrichmentResource`. `sourceUrl` is the page
   the VAT number was read from (usually the company's Impressum; only http(s) addresses are accepted).
   `registeredOwner` names the person the tax authority has the VAT ID under when that is not the trading name —
-  typical for a German sole proprietorship (e.K.).
+  typical for a German sole proprietorship (e.K.). `sourceUrls` lists every page the number was read from,
+  `sourceUrl` first (each research pass that found the same number contributes its page).
 
 ### Changed
 

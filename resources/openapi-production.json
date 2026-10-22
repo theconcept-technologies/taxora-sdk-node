@@ -5569,6 +5569,18 @@
                         "example": "https://kawelke-abschlepp.de/Impressum",
                         "nullable": true
                     },
+                    "sourceUrls": {
+                        "description": "Only on `found`: every page the VAT number was read from, `sourceUrl` first — the independent research passes that found the same number each contribute theirs. At most 5; empty for any other status.",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "format": "uri"
+                        },
+                        "example": [
+                            "https://kawelke-abschlepp.de/Impressum",
+                            "https://www.northdata.de/Kawelke"
+                        ]
+                    },
                     "registeredOwner": {
                         "description": "Only on `found`, when the tax authority has the VAT ID under a PERSON rather than the trading name — typical for a German sole proprietorship (e.K.). The number was confirmed for that owner, who is named in the company's Impressum; `matchedCompanyName` stays the trading name.",
                         "type": "string",

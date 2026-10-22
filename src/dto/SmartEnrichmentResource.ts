@@ -103,6 +103,11 @@ export class SmartEnrichmentResource {
      * the trading name.
      */
     public readonly registeredOwner: string | undefined = undefined,
+    /**
+     * Only on `found`: every page the VAT number was read from, `sourceUrl` first — each research
+     * pass that found the same number contributes its page. At most 5.
+     */
+    public readonly sourceUrls: string[] = [],
   ) {}
 
   /** True when a VAT number was found but rejected by the official check. */
@@ -120,7 +125,10 @@ export class SmartEnrichmentResource {
       return v ? v : undefined;
     };
     // Only an http(s) address — anything else in the field is not a link worth following.
+    const isWebUrl = (value: unknown): value is string =>
+      typeof value === 'string' && /^https?:\/\/\S+$/i.test(value.trim());
     const url = text('sourceUrl');
+    const urls = data['sourceUrls'];
     const num = (key: string): number | undefined => {
       const v = data[key];
       return typeof v === 'number' ? v : undefined;
@@ -144,8 +152,9 @@ export class SmartEnrichmentResource {
         : [],
       typeof quality === 'object' && quality !== null ? (quality as SmartEnrichmentAddressQuality) : undefined,
       toRejectedCandidates(data['rejectedCandidates']),
-      url && /^https?:\/\/\S+$/i.test(url) ? url : undefined,
+      url && isWebUrl(url) ? url : undefined,
       text('registeredOwner'),
+      Array.isArray(urls) ? [...new Set(urls.filter(isWebUrl).map((u) => u.trim()))] : [],
     );
   }
 
@@ -165,6 +174,7 @@ export class SmartEnrichmentResource {
       rejectedCandidates: this.rejectedCandidates.map((c) => ({ vatNumber: c.vatNumber, reason: c.reason })),
       sourceUrl: this.sourceUrl ?? null,
       registeredOwner: this.registeredOwner ?? null,
+      sourceUrls: this.sourceUrls,
     };
   }
 }
