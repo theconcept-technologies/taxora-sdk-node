@@ -2020,6 +2020,112 @@
                 ]
             }
         },
+        "/v1/reports/local-tax-numbers/summary": {
+            "get": {
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "How many companies the local tax numbers report would list",
+                "operationId": "bd45103dd0aab18d3221e1e462e71850",
+                "parameters": [
+                    {
+                        "name": "date_from",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "date_to",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "countries[]",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "example": "PL"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`companies` and `withTaxNumber` for the filters (ignores only_with_tax_number)."
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/reports/local-tax-numbers": {
+            "get": {
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Local tax numbers report (CSV)",
+                "description": "Every company checked — single and bulk VAT checks and Smart Enrichment lookups — once (per VAT ID, or name + country without one; newest answer wins), with its local tax number: `taxNumber`, its national name `taxNumberName` (NIP, SIREN, Partita IVA, Steuernummer …) and `taxNumberSource` (`vat_id` = read off the confirmed VAT ID, `company_website` = published by the company). `vatStatus`: valid, invalid, unconfirmed, wrong_company, no_vat_id, not_found. `source`: vat_check or smart_enrichment; `checkId` is the VAT check uuid or the lookup job id.",
+                "operationId": "d9eddd112406114d5ec630a185264c32",
+                "parameters": [
+                    {
+                        "name": "date_from",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "date_to",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "countries[]",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "example": "PL"
+                            }
+                        }
+                    },
+                    {
+                        "name": "only_with_tax_number",
+                        "in": "query",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CSV, UTF-8 with BOM, comma-separated."
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/reports": {
             "get": {
                 "tags": [
@@ -3509,6 +3615,228 @@
                     },
                     "500": {
                         "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/vat/bulk-checks": {
+            "get": {
+                "tags": [
+                    "VAT"
+                ],
+                "summary": "Recent bulk VAT checks",
+                "operationId": "81ea5e7f7f9754a6debcedba24ba42e1",
+                "responses": {
+                    "200": {
+                        "description": "Newest first, 20 per page (`page` query)."
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "VAT"
+                ],
+                "summary": "Check many VAT IDs at once",
+                "description": "Queues up to 1,000 VAT IDs (optionally with company name and address for the name match). Duplicates are checked once, malformed IDs are reported as `invalid_format` and not counted. Every other ID counts as one check; when the remaining monthly quota is smaller than that, nothing is queued (429, `quota_insufficient`). Poll GET /v1/vat/bulk-checks/{id} for progress and results.",
+                "operationId": "5bc7305a7b643380aa62a76022d3eccd",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "items"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Kunden Oktober",
+                                        "nullable": true
+                                    },
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "vatUid"
+                                            ],
+                                            "properties": {
+                                                "vatUid": {
+                                                    "type": "string",
+                                                    "example": "ATU63964918"
+                                                },
+                                                "companyName": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                },
+                                                "street": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                },
+                                                "postalCode": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                },
+                                                "city": {
+                                                    "type": "string",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "202": {
+                        "description": "Queued; the summary of the bulk check plus `duplicatesRemoved`."
+                    },
+                    "409": {
+                        "description": "Not available in the sandbox environment."
+                    },
+                    "422": {
+                        "description": "Invalid input or more than 1,000 IDs."
+                    },
+                    "429": {
+                        "description": "`quota_insufficient` (with `remaining` and `needed`) or `subscription_inactive`."
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/vat/bulk-checks/quota": {
+            "get": {
+                "tags": [
+                    "VAT"
+                ],
+                "summary": "VAT checks left this month (what a bulk check may use)",
+                "operationId": "22c1d229130e1a69f99471d2c393c787",
+                "responses": {
+                    "200": {
+                        "description": "`remaining` checks and the `maxItems` per upload."
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/vat/bulk-checks/{id}": {
+            "get": {
+                "tags": [
+                    "VAT"
+                ],
+                "summary": "Progress and results of a bulk VAT check",
+                "operationId": "72e8a40e0a92f5d52d03e9695697893d",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The summary plus `items` (see VatBulkCheckItem), in upload order."
+                    },
+                    "404": {
+                        "description": "Not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/vat/bulk-checks/{id}/retry": {
+            "post": {
+                "tags": [
+                    "VAT"
+                ],
+                "summary": "Check the rows of a bulk check again that could not be checked",
+                "description": "Rows with `error` (authority unreachable) or `quota_exceeded` are queued again; each counts as one check. Refused while the upload is still running (409) or when the quota cannot cover them (429 `quota_insufficient`).",
+                "operationId": "7d60717e78c65a9d209486ac94d2891f",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Queued again; the summary plus `retried`."
+                    },
+                    "409": {
+                        "description": "Still running, or nothing to retry."
+                    },
+                    "429": {
+                        "description": "`quota_insufficient` with `remaining` and `needed`."
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/vat/bulk-checks/{id}/export": {
+            "get": {
+                "tags": [
+                    "VAT"
+                ],
+                "summary": "Results of a bulk VAT check as CSV",
+                "operationId": "b0da79c56efa1182fe809222ee2a7e85",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CSV with vatUid, companyName, status, vatValid, officialName, official address, nameMatch, taxNumber, taxNumberName, taxNumberSource, checkedAt, historyUuid."
                     }
                 },
                 "security": [
@@ -6035,6 +6363,100 @@
                     "durationSeconds": {
                         "description": "Total seconds from submission to result; null until finished.",
                         "type": "integer",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
+            "VatBulkCheckItem": {
+                "properties": {
+                    "position": {
+                        "description": "Bulk VAT checks: many VAT IDs at once, checked in the background. Each number becomes a normal\nstored VAT check (VAT history, documents, `vat.validated` webhook) and counts as one check.",
+                        "type": "integer",
+                        "example": 0
+                    },
+                    "vatUid": {
+                        "type": "string",
+                        "example": "PL5260250995"
+                    },
+                    "companyName": {
+                        "type": "string",
+                        "example": "Polskie Fabryki Sp. z o.o.",
+                        "nullable": true
+                    },
+                    "status": {
+                        "description": "`invalid_format` = not a VAT ID (never sent, not counted); `error` = the authority could not be reached (not counted); `quota_exceeded` = the monthly quota ran out first (not counted).",
+                        "type": "string",
+                        "enum": [
+                            "pending",
+                            "valid",
+                            "invalid",
+                            "unconfirmed",
+                            "error",
+                            "invalid_format",
+                            "quota_exceeded"
+                        ],
+                        "example": "valid"
+                    },
+                    "vatValid": {
+                        "type": "boolean",
+                        "example": true,
+                        "nullable": true
+                    },
+                    "officialName": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "officialAddress": {
+                        "type": "object",
+                        "nullable": true
+                    },
+                    "nameMatch": {
+                        "description": "Only when a company name was given and the authority disclosed one.",
+                        "type": "string",
+                        "enum": [
+                            "ok",
+                            "mismatch"
+                        ],
+                        "nullable": true
+                    },
+                    "score": {
+                        "type": "number",
+                        "nullable": true
+                    },
+                    "taxNumber": {
+                        "description": "The local tax number read off the confirmed VAT ID (see Smart Enrichment `taxNumber`).",
+                        "type": "string",
+                        "example": "5260250995",
+                        "nullable": true
+                    },
+                    "taxNumberType": {
+                        "type": "string",
+                        "example": "pl_nip",
+                        "nullable": true
+                    },
+                    "taxNumberLabel": {
+                        "type": "string",
+                        "example": "NIP",
+                        "nullable": true
+                    },
+                    "taxNumberSource": {
+                        "type": "string",
+                        "example": "vat_id",
+                        "nullable": true
+                    },
+                    "message": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "historyUuid": {
+                        "description": "The stored VAT check (GET /v1/vat/history/{uuid}).",
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "checkedAt": {
+                        "type": "string",
+                        "format": "date-time",
                         "nullable": true
                     }
                 },
