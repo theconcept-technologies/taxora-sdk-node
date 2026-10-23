@@ -307,6 +307,39 @@ const results = await client.vat.search('Alpha Handels', 25 /* perPage */);
 
 ---
 
+## 🧾 Local tax numbers report
+
+Every company you checked — single and bulk VAT checks and Smart Enrichment lookups — once, with its **local tax
+number** (NIP, SIREN, Partita IVA, Steuernummer …), the number's national name and where it comes from (`vat_id` =
+read off the confirmed VAT ID, `company_website` = published by the company). All filters are optional.
+
+```typescript
+import { parseLocalTaxNumbersCsv } from '@taxora/sdk';
+import { writeFileSync } from 'node:fs';
+
+// Parsed rows (BOM dropped, cells trimmed, empty cells null)
+const rows = await client.vat.localTaxNumbers({
+  dateFrom: '2026-10-01', // optional (YYYY-MM-DD or Date)
+  dateTo: '2026-10-31', // optional
+  countries: ['PL', 'IT'], // optional (ISO-2)
+  onlyWithTaxNumber: true, // optional: skip companies without one
+});
+for (const row of rows) {
+  // e.g. Orlen S.A. PL 5260250995 (NIP, vat_id)
+  console.log(`${row.companyName} ${row.country} ${row.taxNumber} (${row.taxNumberName}, ${row.taxNumberSource})`);
+}
+// row.vatStatus: valid | invalid | unconfirmed | wrong_company | no_vat_id | not_found
+// row.source: vat_check | smart_enrichment; row.checkId: the VAT check uuid or the lookup job id
+
+// The raw CSV (UTF-8 with BOM) for a spreadsheet. Digit-only tax numbers carry a leading TAB so
+// Excel keeps leading zeros; parseLocalTaxNumbersCsv() turns a saved file into rows.
+writeFileSync('local-tax-numbers.csv', await client.vat.localTaxNumbersCsv({ countries: ['PL'] }));
+
+// Counts for the same filters
+const summary = await client.vat.localTaxNumbersSummary({ dateFrom: '2026-10-01' });
+console.log(`${summary.withTaxNumber} of ${summary.companies} companies have a local tax number`);
+```
+
 ## 🔎 Smart Enrichment (reverse VAT lookup)
 
 Resolve a company **name + address + country → VAT number + confidence**. A confident match

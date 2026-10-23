@@ -49,6 +49,8 @@ export { ProviderDocument } from './dto/ProviderDocument.js';
 export { VatResource } from './dto/VatResource.js';
 export { VatCollection } from './dto/VatCollection.js';
 export { VatCertificateExport } from './dto/VatCertificateExport.js';
+export { LocalTaxNumberRow, parseLocalTaxNumbersCsv } from './dto/LocalTaxNumberReport.js';
+export type { LocalTaxNumberSummary, LocalTaxNumberReportOptions } from './dto/LocalTaxNumberReport.js';
 export { SmartEnrichmentResource } from './dto/SmartEnrichmentResource.js';
 export type {
   SmartEnrichmentProviderVerdict,

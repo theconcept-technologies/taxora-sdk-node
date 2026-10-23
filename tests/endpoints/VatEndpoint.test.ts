@@ -7,6 +7,7 @@ import { VatResource } from '../../src/dto/VatResource.js';
 import { VatCollection } from '../../src/dto/VatCollection.js';
 import { VatCertificateExport } from '../../src/dto/VatCertificateExport.js';
 import { VatValidationAddressInput } from '../../src/dto/VatValidationAddressInput.js';
+import { LocalTaxNumberRow, parseLocalTaxNumbersCsv } from '../../src/dto/LocalTaxNumberReport.js';
 import { Language } from '../../src/enums/Language.js';
 import { HttpException } from '../../src/exceptions/HttpException.js';
 import { ValidationException } from '../../src/exceptions/ValidationException.js';
@@ -467,5 +468,96 @@ describe('VatEndpoint.downloadBulkExport', () => {
     const result = await endpoint.downloadBulkExport('exp-123');
     expect(result).toBeInstanceOf(Uint8Array);
     expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/certificates/bulk-export/exp-123/download`);
+  });
+});
+
+const LOCAL_TAX_NUMBERS_CSV =
+  '\uFEFF' +
+  'companyName,requestedName,country,vatNumber,vatStatus,taxNumber,taxNumberName,taxNumberSource,source,checkedAt,checkId\r\n' +
+  '"Eni S.p.A., Roma",,IT,IT00905811006,valid,"\t00905811006","Partita IVA",vat_id,vat_check,2026-10-22T09:15:00+00:00,uuid-1\r\n' +
+  '"Fritz ""Schiller"" OHG","Fritz Schiller",DE,,no_vat_id,"\t21815953301",Steuernummer,company_website,smart_enrichment,2026-10-21T08:00:00+00:00,job-2\r\n' +
+  '"Unknown GmbH",,AT,,not_found,,,,smart_enrichment,2026-10-20T07:00:00+00:00,job-3\r\n';
+
+describe('VatEndpoint local tax numbers report', () => {
+  it('sends the filters and returns the raw CSV', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.textResponse(LOCAL_TAX_NUMBERS_CSV, 200, 'text/csv; charset=UTF-8'),
+    ]);
+
+    const csv = await endpoint.localTaxNumbersCsv({
+      dateFrom: new Date(2026, 9, 1),
+      dateTo: '2026-10-23',
+      countries: ['pl', 'IT'],
+      onlyWithTaxNumber: true,
+    });
+
+    expect(csv).toBe(LOCAL_TAX_NUMBERS_CSV);
+    expect(client.requests[0]?.method).toBe('GET');
+    expect(client.requests[0]?.url).toBe(
+      `${BASE_URL}/reports/local-tax-numbers?date_from=2026-10-01&date_to=2026-10-23&countries%5B%5D=PL&countries%5B%5D=IT&only_with_tax_number=1`,
+    );
+    const headers = client.requests[0]?.options?.headers as Record<string, string>;
+    expect(headers['Accept']).toContain('text/csv');
+  });
+
+  it('parses rows, drops the BOM and trims the Excel tab', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.textResponse(LOCAL_TAX_NUMBERS_CSV, 200, 'text/csv; charset=UTF-8'),
+    ]);
+
+    const rows = await endpoint.localTaxNumbers();
+
+    expect(client.requests[0]?.url).toBe(`${BASE_URL}/reports/local-tax-numbers`);
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toBeInstanceOf(LocalTaxNumberRow);
+    expect(rows[0]?.companyName).toBe('Eni S.p.A., Roma');
+    expect(rows[0]?.requestedName).toBeNull();
+    expect(rows[0]?.taxNumber).toBe('00905811006');
+    expect(rows[0]?.taxNumberName).toBe('Partita IVA');
+    expect(rows[0]?.taxNumberSource).toBe('vat_id');
+    expect(rows[0]?.source).toBe('vat_check');
+    expect(rows[0]?.checkId).toBe('uuid-1');
+    expect(rows[1]?.companyName).toBe('Fritz "Schiller" OHG');
+    expect(rows[1]?.taxNumber).toBe('21815953301');
+    expect(rows[1]?.taxNumberSource).toBe('company_website');
+    expect(rows[1]?.vatNumber).toBeNull();
+    expect(rows[2]?.taxNumber).toBeNull();
+    expect(rows[2]?.toArray()).toMatchObject({ vatStatus: 'not_found', taxNumberSource: null });
+  });
+
+  it('parses an empty report', () => {
+    expect(
+      parseLocalTaxNumbersCsv(
+        '\uFEFFcompanyName,requestedName,country,vatNumber,vatStatus,taxNumber,taxNumberName,taxNumberSource,source,checkedAt,checkId\n',
+      ),
+    ).toEqual([]);
+    expect(parseLocalTaxNumbersCsv('')).toEqual([]);
+  });
+
+  it('returns the summary counts', async () => {
+    const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ companies: 120, withTaxNumber: 87 })]);
+
+    const summary = await endpoint.localTaxNumbersSummary({ dateFrom: '2026-10-01', countries: ['PL'] });
+
+    expect(summary).toEqual({ companies: 120, withTaxNumber: 87 });
+    expect(client.requests[0]?.url).toBe(
+      `${BASE_URL}/reports/local-tax-numbers/summary?date_from=2026-10-01&countries%5B%5D=PL`,
+    );
+  });
+
+  it('turns an invalid filter into a ValidationException', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse(
+        {
+          message: 'The date to field must be a date after or equal to date from.',
+          errors: { date_to: ['The date to field must be a date after or equal to date from.'] },
+        },
+        422,
+      ),
+    ]);
+
+    await expect(endpoint.localTaxNumbersCsv({ dateFrom: '2026-10-23', dateTo: '2026-10-01' })).rejects.toBeInstanceOf(
+      ValidationException,
+    );
   });
 });

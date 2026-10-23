@@ -13,6 +13,10 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
   domestic number the company published (`'company_website'`, e.g. a DE/AT Steuernummer — not a VAT ID).
   `taxNumberType` is the code (`pl_nip`, `fr_siren`, `de_steuernummer` …), `taxNumberLabel` its national name.
   New type `SmartEnrichmentTaxNumberSource`.
+- **Local tax numbers report** on `client.vat`: `localTaxNumbersCsv()` (raw CSV, UTF-8 with BOM),
+  `localTaxNumbers()` (parsed `LocalTaxNumberRow[]` — BOM dropped, the Excel TAB guard before digit-only tax numbers
+  trimmed, empty cells `null`) and `localTaxNumbersSummary()` (`{ companies, withTaxNumber }`). Filters: `dateFrom`,
+  `dateTo`, `countries`, `onlyWithTaxNumber`. `parseLocalTaxNumbersCsv()` parses a saved file.
 
 ### Changed
 

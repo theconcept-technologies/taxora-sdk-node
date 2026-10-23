@@ -2,6 +2,12 @@ import { VatResource } from '../dto/VatResource.js';
 import { VatCollection } from '../dto/VatCollection.js';
 import { VatCertificateExport } from '../dto/VatCertificateExport.js';
 import { VatValidationAddressInput } from '../dto/VatValidationAddressInput.js';
+import {
+  type LocalTaxNumberReportOptions,
+  type LocalTaxNumberRow,
+  type LocalTaxNumberSummary,
+  parseLocalTaxNumbersCsv,
+} from '../dto/LocalTaxNumberReport.js';
 import { type Language } from '../enums/Language.js';
 import { HttpException } from '../exceptions/HttpException.js';
 import { describeApiError, jsonErrorMessage } from '../exceptions/apiErrorMessage.js';
@@ -169,6 +175,81 @@ export class VatEndpoint {
 
       return new Uint8Array(buffer);
     });
+  }
+
+  /**
+   * Local tax numbers report as raw CSV (UTF-8 with BOM, comma-separated): every company checked —
+   * single and bulk VAT checks and Smart Enrichment lookups — once, with its local tax number
+   * (taxNumber, taxNumberName, taxNumberSource). Digit-only taxNumber cells carry a leading TAB so
+   * Excel keeps them as text; `localTaxNumbers()` strips it for you.
+   */
+  async localTaxNumbersCsv(options: LocalTaxNumberReportOptions = {}): Promise<string> {
+    const params = this.localTaxNumbersParams(options);
+    if (options.onlyWithTaxNumber !== undefined) {
+      params.set('only_with_tax_number', options.onlyWithTaxNumber ? '1' : '0');
+    }
+    const url = this.withQuery(`${this.baseUrl}/reports/local-tax-numbers`, params);
+
+    return withRetries(this.retryPolicy, 'Local tax numbers report', async () => {
+      const headers = this.buildHeaders();
+      delete headers['Content-Type'];
+      headers['Accept'] = 'text/csv, application/json';
+      const response = await this.httpClient.request('GET', url, { headers });
+      if (response.status === 422) {
+        // Same error mapping as the JSON calls (ValidationException with field errors).
+        await this.parseJsonResponse(response);
+      }
+      // Not response.text(): it drops the BOM, which Excel needs to read the file as UTF-8.
+      const text = new TextDecoder('utf-8', { ignoreBOM: true }).decode(await response.arrayBuffer());
+      if (!response.ok) {
+        throw new HttpException(
+          describeApiError(text, response.status),
+          response.status,
+          text,
+          {},
+          response.headers.get('retry-after'),
+        );
+      }
+      return text;
+    });
+  }
+
+  /** The local tax numbers report, parsed: one row per company (same filters as `localTaxNumbersCsv()`). */
+  async localTaxNumbers(options: LocalTaxNumberReportOptions = {}): Promise<LocalTaxNumberRow[]> {
+    return parseLocalTaxNumbersCsv(await this.localTaxNumbersCsv(options));
+  }
+
+  /** How many companies the report would list for the filters, and how many have a tax number. */
+  async localTaxNumbersSummary(
+    options: Omit<LocalTaxNumberReportOptions, 'onlyWithTaxNumber'> = {},
+  ): Promise<LocalTaxNumberSummary> {
+    const url = this.withQuery(
+      `${this.baseUrl}/reports/local-tax-numbers/summary`,
+      this.localTaxNumbersParams(options),
+    );
+
+    return withRetries(this.retryPolicy, 'Local tax numbers summary', async () => {
+      const response = await this.sendRequest('GET', url);
+      const data = await this.parseJsonResponse(response);
+      const count = (key: string): number => (typeof data[key] === 'number' ? (data[key] as number) : 0);
+
+      return { companies: count('companies'), withTaxNumber: count('withTaxNumber') };
+    });
+  }
+
+  private localTaxNumbersParams(options: LocalTaxNumberReportOptions): URLSearchParams {
+    const params = new URLSearchParams();
+    if (options.dateFrom !== undefined) params.set('date_from', this.formatDate(options.dateFrom));
+    if (options.dateTo !== undefined) params.set('date_to', this.formatDate(options.dateTo));
+    for (const country of options.countries ?? []) {
+      params.append('countries[]', country.trim().toUpperCase());
+    }
+    return params;
+  }
+
+  private withQuery(url: string, params: URLSearchParams): string {
+    const queryString = params.toString();
+    return queryString ? `${url}?${queryString}` : url;
   }
 
   private buildHeaders(): Record<string, string> {
