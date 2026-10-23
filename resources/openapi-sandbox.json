@@ -3018,6 +3018,81 @@
                             "default": 25,
                             "maximum": 100
                         }
+                    },
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "description": "Company name, address, VAT or tax number. Matching rows of a batch are returned in `matchedRows`.",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Only lookups with at least one row of this outcome. `found` includes numbers registered to another company, `not_found` includes rejected numbers.",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "found",
+                                "wrong_company",
+                                "rejected",
+                                "not_found",
+                                "no_vat_exists"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "single",
+                                "batch"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "country",
+                        "in": "query",
+                        "description": "ISO 3166-1 alpha-2 country of the queried company.",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "DE"
+                        }
+                    },
+                    {
+                        "name": "postal",
+                        "in": "query",
+                        "description": "Postal code prefix, e.g. `40` for the whole 40xxx area.",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "40"
+                        }
+                    },
+                    {
+                        "name": "date_from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "date_to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
                     }
                 ],
                 "responses": {
@@ -3078,7 +3153,7 @@
                     "Smart Enrichment"
                 ],
                 "summary": "Export lookups as CSV",
-                "description": "Download the authenticated company's Smart Enrichment lookups as a CSV in the bulk-input shape plus resolved VAT columns. Optional filters: date range (created_at), minimum confidence, item status, and only-found.",
+                "description": "Download the authenticated company's Smart Enrichment lookups as a CSV in the bulk-input shape plus resolved VAT columns. `status` is `wrong_company` when the number is valid but the tax authority registers it under another name (`matchedCompanyName` then carries that name). The trailing columns `vatValid`, `nameMatch`, `taxNumber`, `rejectedVatNumber`, `rejectedReason`, `taxNumberName` and `taxNumberSource` say whether the authority confirmed the number, whether it belongs to this company, the local tax number (read off the confirmed VAT ID, or published by the company), which numbers were rejected and why (several joined with |), and the local tax number's national name (SIREN, NIP …) and origin (`vat_id` = read off the confirmed VAT ID, `company_website` = published by the company). Optional filters: date range (created_at), minimum confidence, item status, and only-found.",
                 "operationId": "265fd138147784cc6d83405951b95c88",
                 "parameters": [
                     {
@@ -5587,9 +5662,54 @@
                         "nullable": true
                     },
                     "taxNumber": {
-                        "description": "A domestic tax number (e.g. a German Steuernummer, digits only) the company's own page shows INSTEAD of a VAT ID — often printed under the VAT ID heading by mistake. It is not a VAT ID and cannot be used as one; the status stays `not_found` (or `no_vat_exists`). Null when none was seen.",
+                        "description": "The company's LOCAL tax / business number, in its national notation without spaces — what domestic e-invoicing asks for (PL NIP, IT Partita IVA, FR SIREN, ES NIF, BE enterprise number …). On `found` it is read off the confirmed VAT ID where that country's VAT ID contains it (`taxNumberSource` = `vat_id`). Otherwise it is a domestic number the company itself publishes, e.g. a German or Austrian Steuernummer on its Impressum (`taxNumberSource` = `company_website`) — that one is not a VAT ID, cannot be used as one, and no authority confirms it. Null when there is none.",
                         "type": "string",
-                        "example": "21815953301",
+                        "example": "123456789",
+                        "nullable": true
+                    },
+                    "taxNumberType": {
+                        "description": "What `taxNumber` is. Null when there is none.",
+                        "type": "string",
+                        "enum": [
+                            "fr_siren",
+                            "fr_siret",
+                            "it_partita_iva",
+                            "es_nif",
+                            "pl_nip",
+                            "be_enterprise_number",
+                            "dk_cvr",
+                            "pt_nif",
+                            "ro_cui",
+                            "cz_ico",
+                            "sk_dic",
+                            "se_orgnr",
+                            "no_orgnr",
+                            "fi_business_id",
+                            "si_tax_number",
+                            "hr_oib",
+                            "bg_eik",
+                            "gr_afm",
+                            "de_steuernummer",
+                            "at_steuernummer",
+                            "domestic_tax_number"
+                        ],
+                        "example": "fr_siren",
+                        "nullable": true
+                    },
+                    "taxNumberLabel": {
+                        "description": "The number's name in its country (SIREN, NIP, Steuernummer …), for display.",
+                        "type": "string",
+                        "example": "SIREN",
+                        "nullable": true
+                    },
+                    "taxNumberSource": {
+                        "description": "Where `taxNumber` comes from: `vat_id` = read off the VAT ID the tax authority confirmed (exact); `company_website` = published by the company itself (found, not officially confirmable).",
+                        "type": "string",
+                        "enum": [
+                            "vat_id",
+                            "company_website"
+                        ],
+                        "example": "vat_id",
                         "nullable": true
                     },
                     "confidence": {
@@ -5775,6 +5895,17 @@
                                         "rejected"
                                     ],
                                     "example": "vat_invalid"
+                                },
+                                "vatValidationUuid": {
+                                    "description": "The stored official VAT check of this number (open it with GET /v1/vat/history/{uuid}). Set for real VAT IDs only, not for domestic tax numbers.",
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "nullable": true
+                                },
+                                "vatValid": {
+                                    "description": "The authority's verdict in that stored check.",
+                                    "type": "boolean",
+                                    "nullable": true
                                 }
                             },
                             "type": "object"

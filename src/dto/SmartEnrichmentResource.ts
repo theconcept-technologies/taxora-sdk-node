@@ -62,6 +62,9 @@ function toRejectedCandidates(value: unknown): SmartEnrichmentRejectedCandidate[
   return candidates;
 }
 
+/** Where a Smart Enrichment `taxNumber` comes from. */
+export type SmartEnrichmentTaxNumberSource = 'vat_id' | 'company_website';
+
 /** The registered address the official VAT check returned, field by field. */
 export interface SmartEnrichmentOfficialAddress {
   street?: string;
@@ -132,8 +135,12 @@ export class SmartEnrichmentResource {
      */
     public readonly sourceUrls: string[] = [],
     /**
-     * A domestic tax number (e.g. a German Steuernummer, digits only) the company's own page shows
-     * INSTEAD of a VAT ID — often under the VAT ID heading by mistake. Not a VAT ID.
+     * The company's LOCAL tax / business number, national notation without spaces — what domestic
+     * e-invoicing asks for. On `found` it is read off the confirmed VAT ID where that country's VAT ID
+     * contains it (`taxNumberSource` 'vat_id': FR SIREN, IT Partita IVA, ES NIF, PL NIP, BE enterprise
+     * number, DK CVR, PT, RO, CZ IČO, SK DIČ, SE/NO orgnr, FI Y-tunnus, SI, HR OIB, BG EIK, GR AFM).
+     * Otherwise a domestic number the company itself published ('company_website', e.g. a DE/AT
+     * Steuernummer) — that one is not a VAT ID.
      */
     public readonly taxNumber: string | undefined = undefined,
     /** Only on `found`: the tax authority's verdict on the number; undefined when no official check ran. */
@@ -149,6 +156,15 @@ export class SmartEnrichmentResource {
     public readonly officialName: string | undefined = undefined,
     /** Only on `found`: the registered address, field by field. */
     public readonly officialAddress: SmartEnrichmentOfficialAddress | undefined = undefined,
+    /** What `taxNumber` is, e.g. 'pl_nip', 'fr_siren', 'de_steuernummer'. Undefined when there is none. */
+    public readonly taxNumberType: string | undefined = undefined,
+    /** The number's name in its country (SIREN, NIP, Steuernummer …), for display. */
+    public readonly taxNumberLabel: string | undefined = undefined,
+    /**
+     * Where `taxNumber` comes from: 'vat_id' (read off the VAT ID the tax authority confirmed — exact)
+     * or 'company_website' (published by the company itself, not officially confirmable).
+     */
+    public readonly taxNumberSource: SmartEnrichmentTaxNumberSource | undefined = undefined,
   ) {}
 
   /** True when the register knows the number under a different name than the one requested. */
@@ -207,6 +223,11 @@ export class SmartEnrichmentResource {
       data['nameMatch'] === 'ok' || data['nameMatch'] === 'mismatch' ? data['nameMatch'] : undefined,
       text('officialName'),
       toOfficialAddress(data['officialAddress']),
+      text('taxNumberType'),
+      text('taxNumberLabel'),
+      data['taxNumberSource'] === 'vat_id' || data['taxNumberSource'] === 'company_website'
+        ? data['taxNumberSource']
+        : undefined,
     );
   }
 
@@ -233,6 +254,9 @@ export class SmartEnrichmentResource {
       nameMatch: this.nameMatch ?? null,
       officialName: this.officialName ?? null,
       officialAddress: this.officialAddress ?? null,
+      taxNumberType: this.taxNumberType ?? null,
+      taxNumberLabel: this.taxNumberLabel ?? null,
+      taxNumberSource: this.taxNumberSource ?? null,
     };
   }
 }

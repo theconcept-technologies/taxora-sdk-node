@@ -928,6 +928,9 @@ describe('SmartEnrichmentEndpoint search mode', () => {
         status: 'not_found',
         vatNumber: null,
         taxNumber: '21815953301',
+        taxNumberType: 'de_steuernummer',
+        taxNumberLabel: 'Steuernummer',
+        taxNumberSource: 'company_website',
         vatValid: null,
         nameMatch: 'something-else',
         officialAddress: 'not-an-object',
@@ -939,11 +942,60 @@ describe('SmartEnrichmentEndpoint search mode', () => {
     ).result();
 
     expect(result?.taxNumber).toBe('21815953301');
+    expect(result?.taxNumberType).toBe('de_steuernummer');
+    expect(result?.taxNumberSource).toBe('company_website');
     expect(result?.vatValid).toBeUndefined();
     expect(result?.nameMatch).toBeUndefined();
     expect(result?.nameMismatch()).toBe(false);
     expect(result?.officialAddress).toBeUndefined();
     expect(result?.toArray()['taxNumber']).toBe('21815953301');
+  });
+
+  it('exposes the local tax number read off the confirmed VAT ID', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        jobId: 'job-local',
+        status: 'found',
+        vatNumber: 'PL5260250995',
+        taxNumber: '5260250995',
+        taxNumberType: 'pl_nip',
+        taxNumberLabel: ' NIP ',
+        taxNumberSource: 'vat_id',
+      }),
+    ]);
+
+    const result = (await endpoint.lookup({ companyName: 'Orlen S.A.', country: 'PL' })).result();
+
+    expect(result?.taxNumber).toBe('5260250995');
+    expect(result?.taxNumberType).toBe('pl_nip');
+    expect(result?.taxNumberLabel).toBe('NIP');
+    expect(result?.taxNumberSource).toBe('vat_id');
+    expect(result?.toArray()).toMatchObject({
+      taxNumberType: 'pl_nip',
+      taxNumberLabel: 'NIP',
+      taxNumberSource: 'vat_id',
+    });
+  });
+
+  it('drops unknown or empty local tax number fields', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        jobId: 'job-local-none',
+        status: 'not_found',
+        taxNumber: null,
+        taxNumberType: '',
+        taxNumberLabel: 42,
+        taxNumberSource: 'somewhere-else',
+      }),
+    ]);
+
+    const result = (await endpoint.lookup({ companyName: 'Unknown GmbH', country: 'DE' })).result();
+
+    expect(result?.taxNumber).toBeUndefined();
+    expect(result?.taxNumberType).toBeUndefined();
+    expect(result?.taxNumberLabel).toBeUndefined();
+    expect(result?.taxNumberSource).toBeUndefined();
+    expect(result?.toArray()['taxNumberSource']).toBeNull();
   });
 
   it('defaults rejected candidates to an empty list', async () => {

@@ -2,6 +2,22 @@
 
 All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [1.7.0] — 2026-10-23
+
+### Added
+
+- **Smart Enrichment: `taxNumberType`, `taxNumberLabel`, `taxNumberSource`** next to `taxNumber`. `taxNumber` is now
+  the company's local tax / business number: on `found` it is read off the confirmed VAT ID where that country's
+  VAT ID contains it (`taxNumberSource` = `'vat_id'`: FR SIREN, IT Partita IVA, ES NIF, PL NIP, BE enterprise
+  number, DK CVR, PT, RO, CZ IČO, SK DIČ, SE/NO orgnr, FI Y-tunnus, SI, HR OIB, BG EIK, GR AFM), otherwise a
+  domestic number the company published (`'company_website'`, e.g. a DE/AT Steuernummer — not a VAT ID).
+  `taxNumberType` is the code (`pl_nip`, `fr_siren`, `de_steuernummer` …), `taxNumberLabel` its national name.
+  New type `SmartEnrichmentTaxNumberSource`.
+
+### Changed
+
+- Bundled OpenAPI specs (`resources/`) refreshed from the current API.
+
 ## [1.6.0] — 2026-10-22
 
 ### Added

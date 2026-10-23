@@ -377,9 +377,15 @@ if (result?.nameMismatch()) {
   console.log(result.officialName, result.officialAddress);
 }
 
-// A page that shows a tax number (Steuernummer) under the VAT ID heading is not a VAT ID:
-// the lookup stays 'not_found' and the number comes back as `taxNumber`.
-console.log(result?.taxNumber ?? '—');
+// `taxNumber` is the company's LOCAL tax / business number — what domestic e-invoicing asks for.
+// On 'found' it is read off the confirmed VAT ID where that country's VAT ID contains it
+// (taxNumberSource 'vat_id': FR SIREN, IT Partita IVA, ES NIF, PL NIP, BE, DK CVR, CZ IČO, …).
+// Otherwise it is a number the company published itself ('company_website', e.g. a German
+// Steuernummer shown under the VAT ID heading) — that one is not a VAT ID.
+console.log(result?.taxNumber ?? '—'); // e.g. '5260250995'
+console.log(result?.taxNumberType ?? '—'); // e.g. 'pl_nip', 'fr_siren', 'de_steuernummer'
+console.log(result?.taxNumberLabel ?? '—'); // e.g. 'NIP'
+console.log(result?.taxNumberSource ?? '—'); // 'vat_id' | 'company_website'
 
 // 'not_found' doesn't always mean nothing turned up. When the research found a VAT number but
 // the official check threw it out (e.g. the tax authority reports it as invalid), the number
