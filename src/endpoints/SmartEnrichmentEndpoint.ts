@@ -399,7 +399,8 @@ export class SmartEnrichmentEndpoint {
    * verbatim (text/csv) instead of parsing JSON.
    */
   private async parseCsvResponse(response: Response): Promise<string> {
-    const responseText = await response.text();
+    // Not response.text(): it drops the BOM, which Excel needs to read the file as UTF-8.
+    const responseText = new TextDecoder('utf-8', { ignoreBOM: true }).decode(await response.arrayBuffer());
 
     if (response.status === 422) {
       throw new ValidationException(

@@ -2,6 +2,13 @@
 
 All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [1.7.1] — 2026-10-24
+
+### Fixed
+
+- **`smartEnrichment.export()` keeps the CSV's UTF-8 BOM.** `Response.text()` silently dropped it, so Excel opened a
+  saved export as ANSI and garbled umlauts. The body is now returned byte-for-byte, as documented.
+
 ## [1.7.0] — 2026-10-24
 
 ### Added

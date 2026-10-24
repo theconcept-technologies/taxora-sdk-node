@@ -539,6 +539,17 @@ describe('SmartEnrichmentEndpoint.export', () => {
     expect(req.url).toBe(`${BASE_URL}/smart-enrichment/export`);
   });
 
+  it('keeps the BOM the API sends, so Excel reads the file as UTF-8', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.textResponse('\uFEFF' + CSV_BODY, 200, 'text/csv; charset=UTF-8'),
+    ]);
+
+    const csv = await endpoint.export();
+
+    expect(csv.startsWith('\uFEFF')).toBe(true);
+    expect(csv).toBe('\uFEFF' + CSV_BODY);
+  });
+
   it('serializes all filters as snake_case query params (status[] repeated, only_found as 1)', async () => {
     const { endpoint, client } = makeEndpoint([
       SequenceHttpClient.textResponse(CSV_BODY, 200, 'text/csv; charset=UTF-8'),
