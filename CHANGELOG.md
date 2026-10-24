@@ -2,7 +2,7 @@
 
 All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVer](https://semver.org/).
 
-## [1.7.0] — 2026-10-23
+## [1.7.0] — 2026-10-24
 
 ### Added
 
