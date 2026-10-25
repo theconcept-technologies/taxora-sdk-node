@@ -2,6 +2,22 @@
 
 All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **`smartEnrichment.recheck(jobId, { rows?, dryRun? })`** searches again for rows without a usable answer
+  (`not_found`, or a number registered to another company). Every recheck counts as a check like a new lookup (Deep
+  Verify ×2), found or not; max 3 per row, 7 days apart; `no_vat_exists` and found rows are never rechecked.
+  `dryRun` reports rows, skipped rows and cost without starting anything. Returns `SmartEnrichmentRecheck`
+  (`rows`, `checks`, `skipped`, `dryRun`).
+- **`SmartEnrichmentJob.recheck`** (`SmartEnrichmentRecheckState`: `eligible`, `runs`, `maxPerRow`, `cooldownDays`,
+  `isActive()`) and **`recheckCount` / `lastRecheckedAt`** on each result.
+
+### Changed
+
+- Bundled OpenAPI specs (`resources/`) refreshed from the current API.
+
 ## [1.7.1] — 2026-10-24
 
 ### Fixed

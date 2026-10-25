@@ -3313,6 +3313,16 @@
                         "schema": {
                             "type": "boolean"
                         }
+                    },
+                    {
+                        "name": "job_id",
+                        "in": "query",
+                        "description": "Only this lookup or batch (its jobId).",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
                     }
                 ],
                 "responses": {
@@ -3599,6 +3609,107 @@
                 ]
             }
         },
+        "/v1/smart-enrichment/{jobId}/recheck": {
+            "post": {
+                "tags": [
+                    "Smart Enrichment"
+                ],
+                "summary": "Check rows again",
+                "description": "Searches again for result rows without a usable answer (`not_found`, or a number registered to another company). Every recheck counts as a check like a new lookup (Deep Verify ×2), whether a VAT number is found or not. A row can be rechecked up to 3 times, with 7 days between two rechecks; `no_vat_exists` and found rows are never rechecked. Without `rows`, every row that qualifies is rechecked. Responds 202; each row that improves is delivered via the `enrichment.updated` webhook, and `GET /v1/smart-enrichment/{jobId}` shows the progress under `recheck`. Pass `dryRun: true` to see what would run and what it costs without starting anything.",
+                "operationId": "f076c35aafd4c1a672471a6b1345c461",
+                "parameters": [
+                    {
+                        "name": "jobId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "rows": {
+                                        "description": "0-based row indexes of the lookup; omit for every row that qualifies",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "integer",
+                                            "minimum": 0
+                                        },
+                                        "nullable": true
+                                    },
+                                    "dryRun": {
+                                        "type": "boolean",
+                                        "example": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "202": {
+                        "description": "Rechecks queued (200 for a dry run)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "jobId": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        },
+                                        "rows": {
+                                            "description": "Rows that are (or would be) rechecked",
+                                            "type": "array",
+                                            "items": {
+                                                "type": "integer"
+                                            }
+                                        },
+                                        "checks": {
+                                            "description": "Checks these rechecks use",
+                                            "type": "integer",
+                                            "example": 12
+                                        },
+                                        "skipped": {
+                                            "description": "Rows left out, by reason: resolved, no_vat_exists, limit_reached, cooldown, running, pending",
+                                            "type": "object",
+                                            "example": {
+                                                "cooldown": 2
+                                            }
+                                        },
+                                        "dryRun": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Job not found"
+                    },
+                    "422": {
+                        "description": "Nothing to recheck, the lookup is still running, or not available (sandbox, flat-fee import)"
+                    },
+                    "429": {
+                        "description": "Start credit used up or monthly hard cap reached"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/tenants/me/entitlements": {
             "get": {
                 "tags": [
@@ -3615,6 +3726,134 @@
                     },
                     "500": {
                         "description": "Server error"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/tax-numbers/check": {
+            "post": {
+                "tags": [
+                    "VAT"
+                ],
+                "summary": "Check German and Austrian Steuernummern (format, check digit, tax office)",
+                "description": "Up to 1,000 numbers per call. DE: ELSTER rules — the 13-digit ELSTER form or the 10/11-digit form from tax letters (`states` lists the federal states whose rules it fits; `elster`/`formatted` are only set when that is unambiguous). AT: 9 digits, check digit; `taxOfficeKnown` says whether the 2-digit tax office prefix is one in use. `valid` = such a number can exist; no authority confirms which company it belongs to (tax secrecy). Not counted as VAT checks.",
+                "operationId": "9aa12e036620764d04595a3f2f3b9855",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "items"
+                                ],
+                                "properties": {
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "country",
+                                                "taxNumber"
+                                            ],
+                                            "properties": {
+                                                "country": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "DE",
+                                                        "AT"
+                                                    ],
+                                                    "example": "DE"
+                                                },
+                                                "taxNumber": {
+                                                    "type": "string",
+                                                    "example": "133/8150/8159"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "One result per item, in order.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "results": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "taxNumber": {
+                                                        "type": "string",
+                                                        "example": "133/8150/8159"
+                                                    },
+                                                    "country": {
+                                                        "type": "string",
+                                                        "example": "DE"
+                                                    },
+                                                    "valid": {
+                                                        "type": "boolean",
+                                                        "example": true
+                                                    },
+                                                    "reason": {
+                                                        "description": "Why it is not valid.",
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "format",
+                                                            "check_digit",
+                                                            "unsupported_country"
+                                                        ],
+                                                        "nullable": true
+                                                    },
+                                                    "formatted": {
+                                                        "type": "string",
+                                                        "example": "133/8150/8159",
+                                                        "nullable": true
+                                                    },
+                                                    "elster": {
+                                                        "type": "string",
+                                                        "example": "5133081508159",
+                                                        "nullable": true
+                                                    },
+                                                    "states": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string",
+                                                            "example": "NW"
+                                                        }
+                                                    },
+                                                    "taxOffice": {
+                                                        "type": "string",
+                                                        "example": "5133",
+                                                        "nullable": true
+                                                    },
+                                                    "taxOfficeKnown": {
+                                                        "type": "boolean",
+                                                        "nullable": true
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Invalid input or more than 1,000 items."
                     }
                 },
                 "security": [
@@ -5123,6 +5362,282 @@
                         "description": "VAT verification record not found"
                     }
                 }
+            }
+        },
+        "/v1/vat/history/export": {
+            "get": {
+                "tags": [
+                    "VAT"
+                ],
+                "summary": "VAT checks as CSV, with the columns and format you choose",
+                "description": "Every VAT check of your company (single, bulk and the checks behind Smart Enrichment), newest first. `columns[]` picks and orders the columns (see GET /v1/vat/history/export/columns); `delimiter` comma|semicolon|tab; `language` en|de for the header; `date_format` iso|datetime|de; `timezone` e.g. Europe/Vienna; `latest_only=1` keeps one row per VAT ID. Filters: `from`, `to` (Y-m-d), `search`, `statuses[]`, `countries[]`. Not counted as checks.",
+                "operationId": "5468ef45e819963ca500088a66bc71ac",
+                "parameters": [
+                    {
+                        "name": "columns[]",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "example": "vat_number"
+                            }
+                        }
+                    },
+                    {
+                        "name": "delimiter",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "comma",
+                                "semicolon",
+                                "tab"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "language",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "en",
+                                "de"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "date_format",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "iso",
+                                "datetime",
+                                "de"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "timezone",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "example": "Europe/Vienna"
+                        }
+                    },
+                    {
+                        "name": "latest_only",
+                        "in": "query",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "statuses[]",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "valid",
+                                    "invalid",
+                                    "invalid_format",
+                                    "fraud",
+                                    "unknown"
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "name": "countries[]",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "example": "DE"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CSV, UTF-8 with BOM."
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/vat/history/export/preview": {
+            "get": {
+                "tags": [
+                    "VAT"
+                ],
+                "summary": "The first rows of the VAT checks CSV, as JSON",
+                "description": "Same parameters as /v1/vat/history/export. Returns `header` and up to 5 `rows`.",
+                "operationId": "0fa5c2c758976eb68dfa6585df259261",
+                "responses": {
+                    "200": {
+                        "description": "`header` and `rows`."
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/vat/history/export/columns": {
+            "get": {
+                "tags": [
+                    "VAT"
+                ],
+                "summary": "Columns the VAT checks CSV can contain",
+                "operationId": "11c983eff25b6e4f4bacdfb8180656e8",
+                "responses": {
+                    "200": {
+                        "description": "`columns` (key, English and German header) and the `defaults`."
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/vat/history/export/templates": {
+            "get": {
+                "tags": [
+                    "VAT"
+                ],
+                "summary": "Saved CSV export templates: yours and those shared in your company",
+                "operationId": "c1015c70269d66f630d5888dc7d8a5ac",
+                "responses": {
+                    "200": {
+                        "description": "`templates`: id, name, shared, mine, owner, settings (columns, delimiter, language, date_format, latest_only)."
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "VAT"
+                ],
+                "summary": "Save a CSV export template (same name = update)",
+                "operationId": "a43a81d61ca08756a2ea5d043f5cf7cb",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name",
+                                    "settings"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "For our ERP"
+                                    },
+                                    "shared": {
+                                        "description": "Visible to everyone in your company.",
+                                        "type": "boolean"
+                                    },
+                                    "settings": {
+                                        "description": "columns[], delimiter, language, date_format, latest_only",
+                                        "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "The saved template."
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/vat/history/export/templates/{id}": {
+            "delete": {
+                "tags": [
+                    "VAT"
+                ],
+                "summary": "Delete a CSV export template (your own; shared ones also as company admin)",
+                "operationId": "ece2f60fc85ae1e11e322ac72f1a37eb",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Deleted."
+                    },
+                    "404": {
+                        "description": "Not found or not yours."
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": [],
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v1/webhooks": {

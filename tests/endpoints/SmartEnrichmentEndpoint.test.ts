@@ -1032,3 +1032,99 @@ describe('SmartEnrichmentEndpoint search mode', () => {
     expect(job.result()?.providerVerdicts).toEqual([]);
   });
 });
+
+describe('SmartEnrichmentEndpoint.recheck', () => {
+  it('posts the rows (deduplicated) and returns what it started', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.jsonResponse(
+        { jobId: 'job-1', rows: [0, 3], checks: 2, skipped: { cooldown: 1 }, dryRun: false },
+        202,
+      ),
+    ]);
+
+    const recheck = await endpoint.recheck('job-1', { rows: [0, 3, 3] });
+
+    expect(recheck.rows).toEqual([0, 3]);
+    expect(recheck.checks).toBe(2);
+    expect(recheck.skipped).toEqual({ cooldown: 1 });
+    expect(recheck.dryRun).toBe(false);
+
+    const req = client.requests[0]!;
+    expect(req.method).toBe('POST');
+    expect(req.url).toBe(`${BASE_URL}/smart-enrichment/job-1/recheck`);
+    expect(JSON.parse(req.options?.body as string)).toEqual({ rows: [0, 3] });
+  });
+
+  it('asks for every row that qualifies on a dry run without rows', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({ jobId: 'job-1', rows: [1], checks: 2, skipped: {}, dryRun: true }),
+    ]);
+
+    const recheck = await endpoint.recheck('job-1', { dryRun: true });
+
+    expect(recheck.dryRun).toBe(true);
+    expect(recheck.checks).toBe(2);
+    expect(JSON.parse(client.requests[0]!.options?.body as string)).toEqual({ dryRun: true });
+  });
+
+  it('throws a ValidationException when nothing can be rechecked', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse(
+        {
+          message: 'None of these rows can be checked again right now.',
+          code: 'smart_enrichment_recheck_nothing',
+          skipped: { running: 2 },
+        },
+        422,
+      ),
+    ]);
+
+    await expect(endpoint.recheck('job-1')).rejects.toThrow(ValidationException);
+  });
+
+  it('surfaces a used-up start credit as a 429 HttpException', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse(
+        { message: 'Your Smart Enrichment trial credit is used up.', code: 'smart_enrichment_trial_exhausted' },
+        429,
+      ),
+    ]);
+
+    await expect(endpoint.recheck('job-1')).rejects.toMatchObject({ statusCode: 429 });
+  });
+
+  it('rejects bad input before any request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(endpoint.recheck('')).rejects.toThrow(TaxoraException);
+    await expect(endpoint.recheck('job-1', { rows: [] })).rejects.toThrow(TaxoraException);
+    await expect(endpoint.recheck('job-1', { rows: [-1] })).rejects.toThrow(TaxoraException);
+    await expect(endpoint.recheck('job-1', { rows: [1.5] })).rejects.toThrow(TaxoraException);
+    expect(client.requests).toHaveLength(0);
+  });
+
+  it('get() parses the recheck state and the per-row recheck fields', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        jobId: 'job-1',
+        status: 'completed',
+        itemCount: 2,
+        results: [
+          { status: 'not_found', recheckCount: 1, lastRecheckedAt: '2026-10-25T10:00:00+00:00' },
+          { status: 'not_found' },
+        ],
+        recheck: { eligible: [1], runs: { '0': { state: 'running' } }, maxPerRow: 3, cooldownDays: 7 },
+      }),
+    ]);
+
+    const job = await endpoint.get('job-1');
+
+    expect(job.recheck?.eligible).toEqual([1]);
+    expect(job.recheck?.runs[0]).toEqual({ state: 'running' });
+    expect(job.recheck?.isActive()).toBe(true);
+    expect(job.results[0]?.recheckCount).toBe(1);
+    expect(job.results[0]?.lastRecheckedAt).toBe('2026-10-25T10:00:00+00:00');
+    expect(job.results[1]?.recheckCount).toBeUndefined();
+    expect(job.results[0]?.toArray()['recheckCount']).toBe(1);
+  });
+});

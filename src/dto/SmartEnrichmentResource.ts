@@ -165,6 +165,10 @@ export class SmartEnrichmentResource {
      * or 'company_website' (published by the company itself, not officially confirmable).
      */
     public readonly taxNumberSource: SmartEnrichmentTaxNumberSource | undefined = undefined,
+    /** How often this row was checked again (`smartEnrichment.recheck()`); undefined when never. */
+    public readonly recheckCount: number | undefined = undefined,
+    /** When it was last checked again (ISO 8601). */
+    public readonly lastRecheckedAt: string | undefined = undefined,
   ) {}
 
   /** True when the register knows the number under a different name than the one requested. */
@@ -228,6 +232,8 @@ export class SmartEnrichmentResource {
       data['taxNumberSource'] === 'vat_id' || data['taxNumberSource'] === 'company_website'
         ? data['taxNumberSource']
         : undefined,
+      num('recheckCount'),
+      text('lastRecheckedAt'),
     );
   }
 
@@ -257,6 +263,8 @@ export class SmartEnrichmentResource {
       taxNumberType: this.taxNumberType ?? null,
       taxNumberLabel: this.taxNumberLabel ?? null,
       taxNumberSource: this.taxNumberSource ?? null,
+      recheckCount: this.recheckCount ?? null,
+      lastRecheckedAt: this.lastRecheckedAt ?? null,
     };
   }
 }

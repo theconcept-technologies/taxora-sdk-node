@@ -1,5 +1,6 @@
 import { type SmartEnrichmentMode } from '../enums/SmartEnrichmentMode.js';
 import { SmartEnrichmentJob } from '../dto/SmartEnrichmentJob.js';
+import { SmartEnrichmentRecheck, type SmartEnrichmentRecheckOptions } from '../dto/SmartEnrichmentRecheck.js';
 import { SmartEnrichmentHistoryPage } from '../dto/SmartEnrichmentHistoryPage.js';
 import { SmartEnrichmentStatistics, type SmartEnrichmentStatisticsInterval } from '../dto/SmartEnrichmentStatistics.js';
 import { type SmartEnrichmentStatus } from '../enums/SmartEnrichmentStatus.js';
@@ -150,6 +151,44 @@ export class SmartEnrichmentEndpoint {
     const response = await this.sendRequest('GET', `${this.baseUrl}/smart-enrichment/${encodeURIComponent(jobId)}`);
     const data = await this.parseJsonResponse(response);
     return SmartEnrichmentJob.fromArray(data);
+  }
+
+  /**
+   * Search again for rows of a finished lookup that have no usable answer (`not_found`, or a
+   * number registered to another company). Without `rows` every row that qualifies is rechecked.
+   *
+   * Every recheck counts as a check like a new lookup (Deep Verify ×2), whether a VAT number is
+   * found or not. A row can be rechecked up to 3 times, with 7 days between two rechecks;
+   * `no_vat_exists` and found rows are never rechecked. Pass `dryRun` to see which rows would run
+   * and what they cost without starting anything. Improved rows arrive via the
+   * `enrichment.updated` webhook; `get(jobId).recheck` shows the progress.
+   *
+   * Throws a ValidationException when nothing can be rechecked, the lookup is still running, or
+   * rechecks are not available (sandbox, flat-fee import), and an HttpException (429) when the
+   * start credit or monthly hard cap does not cover it.
+   */
+  async recheck(jobId: string, options: SmartEnrichmentRecheckOptions = {}): Promise<SmartEnrichmentRecheck> {
+    this.validateJobId(jobId);
+
+    const body: Record<string, unknown> = {};
+    if (options.rows !== undefined) {
+      if (options.rows.length === 0) {
+        throw new TaxoraException('rows must not be empty; omit it to recheck every row that qualifies.');
+      }
+      if (options.rows.some((index) => !Number.isInteger(index) || index < 0)) {
+        throw new TaxoraException('rows must contain 0-based row indexes (integers >= 0).');
+      }
+      body['rows'] = [...new Set(options.rows)];
+    }
+    if (options.dryRun) body['dryRun'] = true;
+
+    const response = await this.sendRequest(
+      'POST',
+      `${this.baseUrl}/smart-enrichment/${encodeURIComponent(jobId)}/recheck`,
+      body,
+    );
+    const data = await this.parseJsonResponse(response, [200, 202]);
+    return SmartEnrichmentRecheck.fromArray(data);
   }
 
   /**

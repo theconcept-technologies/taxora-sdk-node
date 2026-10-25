@@ -60,6 +60,13 @@ export type {
   SmartEnrichmentTaxNumberSource,
 } from './dto/SmartEnrichmentResource.js';
 export { SmartEnrichmentJob } from './dto/SmartEnrichmentJob.js';
+export { SmartEnrichmentRecheck, SmartEnrichmentRecheckState } from './dto/SmartEnrichmentRecheck.js';
+export type {
+  SmartEnrichmentRecheckOptions,
+  SmartEnrichmentRecheckRun,
+  SmartEnrichmentRecheckRunState,
+  SmartEnrichmentRecheckSkipReason,
+} from './dto/SmartEnrichmentRecheck.js';
 export { SmartEnrichmentHistoryRow } from './dto/SmartEnrichmentHistoryRow.js';
 export type { SmartEnrichmentHistoryInput } from './dto/SmartEnrichmentHistoryRow.js';
 export { SmartEnrichmentHistoryPage } from './dto/SmartEnrichmentHistoryPage.js';

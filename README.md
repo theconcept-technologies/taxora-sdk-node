@@ -448,6 +448,26 @@ for (const row of history) {
 }
 ```
 
+### Check rows again
+
+Search once more for rows without a usable answer (`not_found`, or a number registered to another company). Every
+recheck counts as a check like a new lookup (Deep Verify ×2), whether a VAT number is found or not. A row can be
+rechecked up to 3 times, 7 days apart; `no_vat_exists` and found rows are never rechecked.
+
+```ts
+// What would run, and what it costs — nothing is started
+const plan = await client.smartEnrichment.recheck(jobId, { dryRun: true });
+console.log(plan.rows.length, 'rows,', plan.checks, 'checks, skipped:', plan.skipped);
+
+await client.smartEnrichment.recheck(jobId); // every row that qualifies
+await client.smartEnrichment.recheck(jobId, { rows: [3, 7] }); // or just these rows
+
+// Improved rows arrive via the `enrichment.updated` webhook; or poll:
+const job = await client.smartEnrichment.get(jobId);
+console.log(job.recheck?.isActive() ? 'still rechecking' : 'done');
+console.log(job.results[3]?.recheckCount, job.results[3]?.lastRecheckedAt);
+```
+
 ### Quota usage & billing history
 
 ```ts

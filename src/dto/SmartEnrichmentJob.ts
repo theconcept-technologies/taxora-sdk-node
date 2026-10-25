@@ -1,3 +1,4 @@
+import { SmartEnrichmentRecheckState } from './SmartEnrichmentRecheck.js';
 import { SmartEnrichmentResource } from './SmartEnrichmentResource.js';
 import { SmartEnrichmentStatus, toSmartEnrichmentStatus } from '../enums/SmartEnrichmentStatus.js';
 
@@ -14,6 +15,8 @@ export class SmartEnrichmentJob {
     public readonly completedCount: number | undefined,
     public readonly foundCount: number | undefined,
     public readonly results: SmartEnrichmentResource[],
+    /** Which rows can be checked again and which are being rechecked (undefined on older API versions). */
+    public readonly recheck: SmartEnrichmentRecheckState | undefined = undefined,
   ) {}
 
   static fromArray(data: Record<string, unknown>): SmartEnrichmentJob {
@@ -41,6 +44,9 @@ export class SmartEnrichmentJob {
       num('completedCount'),
       num('foundCount'),
       results,
+      typeof data['recheck'] === 'object' && data['recheck'] !== null && !Array.isArray(data['recheck'])
+        ? SmartEnrichmentRecheckState.fromArray(data['recheck'] as Record<string, unknown>)
+        : undefined,
     );
   }
 
