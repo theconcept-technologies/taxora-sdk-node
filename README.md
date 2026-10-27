@@ -124,7 +124,10 @@ TaxoraClientFactory.create()
   └── TaxoraClient
         ├── auth    → AuthEndpoint    (login, loginWithClientId, refresh)
         ├── vat     → VatEndpoint     (validate, history, search, certificates)
-        └── company → CompanyEndpoint (company info)
+        ├── company → CompanyEndpoint (company info)
+        ├── smartEnrichment → SmartEnrichmentEndpoint (reverse VAT lookup)
+        ├── eReporting      → EReportingEndpoint      (compliance: enrollments, transactions, plans)
+        └── billing         → BillingEndpoint         (usage summaries)
 ```
 
 Each endpoint handles:
@@ -153,6 +156,8 @@ Each endpoint handles:
 | `ProviderDocument`          | Attached provider document metadata (type, date, MIME, hash, nested line item)                  |
 | `ComplianceEnrollment`      | Per-country compliance enrollment: country, regime, `service`, provisioning status              |
 | `ComplianceTransaction`     | Recorded transaction / e-invoice: amounts, state, buyer fields, `documentType`, `providerState` |
+| `ComplianceOfferings`       | Bookable compliance plans per country, coverage, unlocked services                              |
+| `UsageSummary`              | Billed usage of one feature in one billing period (YYYY-MM), optionally with its events         |
 | `ComplianceTaxReport`       | DGFiP tax report lifecycle of a transaction (France)                                            |
 | `SireneLookupResult`        | Company data from the French SIRENE registry                                                    |
 | `RegistryCompany`           | Company from a national register (Norway: Brønnøysund) — org number, VAT / register flags       |
@@ -637,7 +642,7 @@ console.log(submitted.state, submitted.stateLabel); // e.g. "submitted"
 const transactions = await client.eReporting.listTransactions({
   dateFrom: '2026-07-01', // or a Date
   dateTo: '2026-07-31',
-  state: 'pending', // 'pending' | 'sending' | 'submitted' | 'error'
+  state: 'pending', // 'pending' | 'sending' | 'submitted' | 'error' | 'not_required'
   transactionType: 'b2c_outbound',
   complianceEnrollmentId: enrollment.id, // optional: one enrollment only
   country: 'FR', // optional: one country only
@@ -674,7 +679,7 @@ Every submitted transaction is tracked through the aggregated DGFiP ledger lifec
 (`new → sent → acknowledged → registered` or `refused`/`error`).
 
 ```ts
-const reports = await client.eReporting.listTaxReports(1, 25, 'refused'); // state filter optional
+const reports = await client.eReporting.listTaxReports(1, 25, 'refused', 'FR'); // state + country filters optional
 for (const report of reports) {
   console.log(report.state, report.stateLabel, report.isTerminal, report.refusalReason);
 }
@@ -712,6 +717,7 @@ const stats = await client.eReporting.getRevenueStatistics({
   interval: 'month', // 'day' | 'week' | 'month' (default 'month')
   transactionType: 'b2c_outbound', // optional filter
   state: 'submitted', // optional filter
+  complianceEnrollmentId: enrollment.id, // optional: one enrollment = one country's figures
 });
 
 console.log(stats.primaryCurrency); // e.g. EUR
@@ -722,6 +728,23 @@ for (const bucket of stats.timeSeries) {
 for (const row of stats.byCountry) {
   console.log(`${row.country} → ${row.total}`); // 'unknown' groups NULL partners
 }
+```
+
+### Tax-rate CSV
+
+Net and VAT per month, currency and tax rate (semicolon-separated, computed from the invoice lines) — for reconciling
+the reported figures with your VAT return. Same filters as `getRevenueStatistics()` without `interval`. The body is
+returned byte-for-byte, a UTF-8 BOM included.
+
+```ts
+import { writeFileSync } from 'fs';
+
+const csv = await client.eReporting.exportRevenueTaxRatesCsv({
+  dateFrom: '2026-01-01',
+  dateTo: '2026-12-31',
+  complianceEnrollmentId: enrollment.id, // optional: one country only
+});
+writeFileSync('tax-rates.csv', csv);
 ```
 
 ### 🇳🇴 E-Invoicing Norway (EHF / Peppol)
@@ -837,6 +860,69 @@ console.log(creditNote.isCreditNote); // true
 const noDocs = await client.eReporting.listTransactions({ country: 'NO' });
 ```
 
+**6. Attach your own invoice PDF** (e-invoicing only, max 10 MB) — pass the bytes (`Buffer` / `Uint8Array` /
+`ArrayBuffer`); the SDK base64-encodes them. A string is sent as-is and must already be base64. The structured
+e-invoice stays the legal document; whether the buyer's system shows the PDF depends on that system.
+
+```ts
+import { readFileSync } from 'fs';
+
+const withPdf = await client.eReporting.createTransaction({
+  ...invoiceInput,
+  invoicePdf: readFileSync('NO-2026-0002.pdf'),
+  invoicePdfFilename: 'NO-2026-0002.pdf', // optional, defaults to the invoice number
+});
+console.log(withPdf.invoicePdf); // { filename, size, attached } — attached once uploaded with the e-invoice
+
+await client.eReporting.updateTransaction(withPdf.id, { invoicePdf: readFileSync('fixed.pdf') }); // replaces it
+```
+
+**7. Buyer not on Peppol / download the legal document**
+
+```ts
+const tx = await client.eReporting.getTransaction(invoice.id);
+
+if (tx.state === 'not_required') {
+  // The buyer cannot receive e-invoices: nothing was sent or billed — send your regular invoice.
+  console.log(tx.deliveryCheck); // Peppol directory answer, e.g. { status: 'not_reachable', … }
+}
+
+if (tx.documentUrl !== null) {
+  const doc = await client.eReporting.getTransactionDocument(tx.id); // 409 while not available yet
+  writeFileSync(doc.filename ?? `${tx.invoiceNumber}.xml`, doc.content); // doc.contentType e.g. application/xml
+}
+```
+
+### Self-service plans (Stripe)
+
+Book compliance plans without contacting sales. These routes work for companies **without** compliance access.
+
+```ts
+const { offerings, coverage, access, accessByCountry } = await client.eReporting.getOfferings();
+const plan = offerings.find((o) => o.country === 'NO')?.plans.find((p) => p.checkoutAvailable);
+
+const session = await client.eReporting.createCheckout('NO', plan!.key); // 422 if contact-only / already active
+// open session.url in the browser; Stripe returns the user to the Taxora portal
+const state = await client.eReporting.confirmCheckout(session.id); // idempotent → { active, country, service, plan, status }
+
+const portalUrl = await client.eReporting.createBillingPortalSession(); // invoices, payment method, cancel; 404 without a Stripe plan
+```
+
+### Billing usage summaries
+
+Read-only usage of your billable modules (E-Reporting / E-Invoicing, Smart Enrichment), per feature and billing
+period.
+
+```ts
+const page = await client.billing.listUsageSummaries(1, 25); // newest period first
+for (const summary of page) {
+  console.log(summary.billingPeriod, summary.feature, summary.eventCount, summary.billableAmount, summary.state);
+}
+
+const september = await client.billing.getUsageSummaries('2026-09'); // with events; 404 for a period without usage
+console.log(september[0]?.events.length);
+```
+
 ---
 
 ## 📜 Certificates
@@ -921,6 +1007,11 @@ line of your application. The SDK uses the `message` / `error` field of a JSON
 error body when there is one, and falls back to the status line
 (`Taxora API request failed (HTTP 504 Gateway Timeout).`) otherwise. The
 untouched body stays available via `err.getResponseBody()`.
+
+**Compliance 403 codes.** Compliance 403s are `HttpException`s; the reason is the `code` in the JSON body
+(`err.getResponseBody()`): `service_not_active` (the company has not booked the service/country) or
+`read_only_role` (a write request — create, update, delete, submit, import — by a user whose only role is
+read-only).
 
 ### Automatic retries
 
@@ -1037,6 +1128,24 @@ Next.js App Router: `const rawBody = await request.text();` (not `request.json()
 - **Raw body:** pass a `string`, `Buffer` or `Uint8Array`. Passing an already parsed object throws
   `reason: 'invalid_body'`.
 - **Idempotency:** dedupe on `event.id` (= `Taxora-Webhook-Id`), which stays the same across retries.
+
+### Events
+
+| Event                                  | `data.object`                                                                                       |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `vat.validated` / `vat.state_changed`  | `VatWebhookObject` (`id`, `vat_uid`, `state`, `company_name`, …)                                    |
+| `compliance.transaction.state_changed` | `ComplianceTransactionWebhookObject` (`id`, `state`, `provider_state`, `country`, `invoice_number`) |
+| `compliance.ledger.state_changed`      | `ComplianceLedgerWebhookObject` (`id`, `state`, `ledger_type`, `ledger_date`)                       |
+| `enrichment.completed`                 | `EnrichmentCompletedWebhookObject` (`jobId`, `status`, `results`, …)                                |
+| `enrichment.updated`                   | `EnrichmentUpdatedWebhookObject` (`jobId`, `rowIndex`, `result`, …)                                 |
+| `webhook.test`                         | `TestWebhookObject` (`message`)                                                                     |
+
+```ts
+if (event.event === 'compliance.transaction.state_changed') {
+  const { id, state, provider_state } = event.data.object; // e.g. 'submitted' / 'accepted', or 'not_required'
+  if (state === 'submitted') await client.eReporting.getTransaction(id);
+}
+```
 
 ---
 

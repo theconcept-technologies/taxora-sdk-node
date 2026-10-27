@@ -133,12 +133,20 @@ describe('ComplianceEnrollmentStatus', () => {
 
 describe('ComplianceTransactionState', () => {
   it('has all backend values', () => {
-    expect(Object.values(ComplianceTransactionState)).toEqual(['pending', 'sending', 'submitted', 'error', 'unknown']);
+    expect(Object.values(ComplianceTransactionState)).toEqual([
+      'pending',
+      'sending',
+      'submitted',
+      'error',
+      'not_required',
+      'unknown',
+    ]);
   });
 
   it('toComplianceTransactionState coerces tolerantly', () => {
     expect(toComplianceTransactionState('submitted')).toBe(ComplianceTransactionState.SUBMITTED);
     expect(toComplianceTransactionState(' PENDING ')).toBe(ComplianceTransactionState.PENDING);
+    expect(toComplianceTransactionState('not_required')).toBe(ComplianceTransactionState.NOT_REQUIRED);
     expect(toComplianceTransactionState('teleporting')).toBe(ComplianceTransactionState.UNKNOWN);
     expect(toComplianceTransactionState(undefined)).toBe(ComplianceTransactionState.UNKNOWN);
   });

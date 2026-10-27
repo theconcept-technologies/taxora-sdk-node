@@ -61,6 +61,33 @@ export interface ComplianceTransactionInvoiceLine {
   taxes: ComplianceTransactionInvoiceLineTax[];
 }
 
+/** The seller's own invoice PDF attached to an e-invoice (`invoice_pdf`). */
+export interface ComplianceTransactionInvoicePdf {
+  filename: string | null;
+  /** Size in bytes. */
+  size: number | null;
+  /** True once the PDF was uploaded to the provider together with the e-invoice. */
+  attached: boolean;
+}
+
+/**
+ * E-invoicing: the Peppol directory answer about the buyer when it held the
+ * invoice back (`delivery_check`) — e.g. status `not_reachable` (state
+ * `not_required`) or `pending` (retried automatically). Kept as the raw object;
+ * its keys may grow.
+ */
+export type ComplianceTransactionDeliveryCheck = Record<string, unknown>;
+
+function toInvoicePdf(value: unknown): ComplianceTransactionInvoicePdf | null {
+  const pdf = asRecord(value);
+  if (pdf === null) return null;
+  return {
+    filename: asNullableString(pdf['filename']),
+    size: asNullableNumber(pdf['size']),
+    attached: pdf['attached'] === true,
+  };
+}
+
 function toInvoiceLines(providerPayload: unknown): ComplianceTransactionInvoiceLine[] {
   const invoice = asRecord(asRecord(providerPayload)?.['invoice']);
 
@@ -137,6 +164,15 @@ export class ComplianceTransaction {
     public readonly providerState: string | null = null,
     /** The stored invoice lines (empty when the server does not include them). */
     public readonly invoiceLines: ComplianceTransactionInvoiceLine[] = [],
+    /**
+     * E-invoicing: URL of the legal e-invoice document once it was sent; null
+     * until then. Download it with `eReporting.getTransactionDocument(id)`.
+     */
+    public readonly documentUrl: string | null = null,
+    /** E-invoicing: Peppol directory answer when the buyer check held the invoice back; null otherwise. */
+    public readonly deliveryCheck: ComplianceTransactionDeliveryCheck | null = null,
+    /** E-invoicing: the attached seller PDF, or null when none is attached. */
+    public readonly invoicePdf: ComplianceTransactionInvoicePdf | null = null,
   ) {}
 
   get isCreditNote(): boolean {
@@ -190,6 +226,9 @@ export class ComplianceTransaction {
       asNullableString(data['amended_date']),
       asNullableString(data['provider_state']),
       toInvoiceLines(data['provider_payload']),
+      asNullableString(data['document_url']),
+      asRecord(data['delivery_check']),
+      toInvoicePdf(data['invoice_pdf']),
     );
   }
 }

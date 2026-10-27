@@ -2,6 +2,29 @@
 
 All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **`eReporting.getTransactionDocument(id)`** downloads the legal e-invoice of a sent transaction
+  (`{ content: Uint8Array, contentType, filename }`); 409 while it is not available yet.
+- **Invoice PDF attachment:** `invoicePdf` / `invoicePdfFilename` on `createTransaction()` and `updateTransaction()`
+  (e-invoicing only). Bytes (`Buffer` / `Uint8Array` / `ArrayBuffer`) are checked (PDF, max 10 MB) and base64-encoded;
+  strings are sent as-is (already base64).
+- **`ComplianceTransaction.documentUrl`, `.deliveryCheck` and `.invoicePdf`** (`{ filename, size, attached }`).
+- **`ComplianceTransactionState.NOT_REQUIRED`** (`not_required`): the buyer cannot receive e-invoices, so nothing was
+  sent or billed.
+- **`eReporting.exportRevenueTaxRatesCsv(filters)`**: net and VAT per month and tax rate as CSV (BOM preserved).
+- **Self-service plans:** `eReporting.getOfferings()` (`ComplianceOfferings`), `createCheckout(country, plan)`,
+  `confirmCheckout(sessionId)` and `createBillingPortalSession()`.
+- **`client.billing`** (`BillingEndpoint`): `listUsageSummaries(page, perPage)` (`UsageSummaryPage`) and
+  `getUsageSummaries(period)` (`UsageSummary[]` with events).
+- **Per-country filters:** `complianceEnrollmentId` on `getRevenueStatistics()` and `exportRevenueTaxRatesCsv()`;
+  `country` as 4th argument of `listTaxReports(page, perPage, state, country)`.
+- README: compliance write requests by a read-only user return 403 with code `read_only_role` (HttpException).
+- README: compliance webhook events (`compliance.transaction.state_changed`, `compliance.ledger.state_changed`) listed
+  with their payloads.
+
 ## [1.8.0] — 2026-10-25
 
 ### Added

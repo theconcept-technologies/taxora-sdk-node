@@ -36,7 +36,14 @@ export type {
   ComplianceInvoiceTaxInput,
   ComplianceTransactionFilters,
   EReportingAccessRequestInput,
+  RevenueTaxRatesCsvFilters,
+  ComplianceTransactionDocument,
+  ComplianceCheckoutSession,
+  ComplianceCheckoutConfirmation,
+  ComplianceInvoicePdfInput,
+  ComplianceInvoicePdfFields,
 } from './endpoints/EReportingEndpoint.js';
+export { BillingEndpoint } from './endpoints/BillingEndpoint.js';
 
 // DTOs
 export { Token } from './dto/Token.js';
@@ -96,7 +103,17 @@ export { ComplianceTransaction } from './dto/ComplianceTransaction.js';
 export type {
   ComplianceTransactionInvoiceLine,
   ComplianceTransactionInvoiceLineTax,
+  ComplianceTransactionInvoicePdf,
+  ComplianceTransactionDeliveryCheck,
 } from './dto/ComplianceTransaction.js';
+export { ComplianceOfferings } from './dto/ComplianceOfferings.js';
+export type {
+  ComplianceOffering,
+  ComplianceOfferingPlan,
+  ComplianceCoverageCountry,
+} from './dto/ComplianceOfferings.js';
+export { UsageSummary, UsageSummaryPage } from './dto/UsageSummary.js';
+export type { UsageEvent } from './dto/UsageSummary.js';
 export { ComplianceTransactionPage } from './dto/ComplianceTransactionPage.js';
 export { ComplianceTaxReport } from './dto/ComplianceTaxReport.js';
 export { ComplianceTaxReportPage } from './dto/ComplianceTaxReportPage.js';

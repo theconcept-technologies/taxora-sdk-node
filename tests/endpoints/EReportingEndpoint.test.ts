@@ -15,6 +15,7 @@ import { Token } from '../../src/dto/Token.js';
 import { SequenceHttpClient } from '../fixtures/SequenceHttpClient.js';
 import { ComplianceEnrollment } from '../../src/dto/ComplianceEnrollment.js';
 import { ComplianceEnrollmentPage } from '../../src/dto/ComplianceEnrollmentPage.js';
+import { ComplianceOfferings } from '../../src/dto/ComplianceOfferings.js';
 import { ComplianceTaxReport } from '../../src/dto/ComplianceTaxReport.js';
 import { ComplianceTaxReportPage } from '../../src/dto/ComplianceTaxReportPage.js';
 import { ComplianceTransaction } from '../../src/dto/ComplianceTransaction.js';
@@ -1777,5 +1778,373 @@ describe('EReportingEndpoint.requestEReportingAccess (per-country services)', ()
       'countries[1] must be a 2-character ISO 3166-1 alpha-2 code.',
     );
     expect(client.requests).toHaveLength(0);
+  });
+});
+
+describe('EReportingEndpoint e-invoicing transaction fields', () => {
+  const PDF_BYTES = new TextEncoder().encode('%PDF-1.7\nfake invoice');
+
+  it('maps documentUrl, deliveryCheck and invoicePdf from the response', () => {
+    const tx = ComplianceTransaction.fromArray({
+      ...TRANSACTION_PAYLOAD,
+      state: 'not_required',
+      document_url: 'https://api.taxora.io/v1/compliance/transactions/99/document',
+      delivery_check: { status: 'not_reachable', checked_at: '2027-01-02T10:00:00+00:00' },
+      invoice_pdf: { filename: 'RE-2027-0001.pdf', size: 1234, attached: true },
+    });
+
+    expect(tx.state).toBe(ComplianceTransactionState.NOT_REQUIRED);
+    expect(tx.documentUrl).toBe('https://api.taxora.io/v1/compliance/transactions/99/document');
+    expect(tx.deliveryCheck).toEqual({ status: 'not_reachable', checked_at: '2027-01-02T10:00:00+00:00' });
+    expect(tx.invoicePdf).toEqual({ filename: 'RE-2027-0001.pdf', size: 1234, attached: true });
+  });
+
+  it('defaults the e-invoicing fields to null when the server omits them', () => {
+    const tx = ComplianceTransaction.fromArray(TRANSACTION_PAYLOAD);
+
+    expect(tx.documentUrl).toBeNull();
+    expect(tx.deliveryCheck).toBeNull();
+    expect(tx.invoicePdf).toBeNull();
+  });
+
+  it('base64-encodes invoicePdf bytes on create', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(TRANSACTION_PAYLOAD, 201)]);
+
+    await endpoint.createTransaction({
+      ...validTransactionInput(),
+      invoicePdf: Buffer.from(PDF_BYTES),
+      invoicePdfFilename: 'RE-2027-0001.pdf',
+    });
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    expect(body['invoice_pdf']).toBe(Buffer.from(PDF_BYTES).toString('base64'));
+    expect(body['invoice_pdf_filename']).toBe('RE-2027-0001.pdf');
+  });
+
+  it('accepts an ArrayBuffer or an already base64 string on update', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(TRANSACTION_PAYLOAD), envelope(TRANSACTION_PAYLOAD)]);
+    const base64 = Buffer.from(PDF_BYTES).toString('base64');
+    const arrayBuffer = PDF_BYTES.slice().buffer;
+
+    await endpoint.updateTransaction(99, { invoicePdf: arrayBuffer });
+    await endpoint.updateTransaction(99, { invoicePdf: `data:application/pdf;base64,${base64}` });
+
+    expect(JSON.parse(client.requests[0]!.options?.body as string)).toEqual({ invoice_pdf: base64 });
+    expect(JSON.parse(client.requests[1]!.options?.body as string)).toEqual({
+      invoice_pdf: `data:application/pdf;base64,${base64}`,
+    });
+  });
+
+  it('rejects non-PDF bytes, empty input and a too long filename without a request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(
+      endpoint.createTransaction({ ...validTransactionInput(), invoicePdf: new TextEncoder().encode('hello') }),
+    ).rejects.toThrow('invoicePdf must be a PDF file');
+    await expect(endpoint.updateTransaction(99, { invoicePdf: new Uint8Array() })).rejects.toThrow(
+      'invoicePdf must not be empty.',
+    );
+    await expect(endpoint.updateTransaction(99, { invoicePdfFilename: 'x'.repeat(121) })).rejects.toThrow(
+      'invoicePdfFilename must not exceed 120 characters.',
+    );
+    expect(client.requests).toHaveLength(0);
+  });
+});
+
+describe('EReportingEndpoint.getTransactionDocument', () => {
+  it('GETs the document and returns bytes, content type and filename', async () => {
+    const xml = new TextEncoder().encode('<?xml version="1.0"?><Invoice/>');
+    const { endpoint, client } = makeEndpoint([
+      new Response(xml, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/xml',
+          'Content-Disposition': 'attachment; filename="RE-2027-0001.xml"',
+        },
+      }),
+    ]);
+
+    const doc = await endpoint.getTransactionDocument(99);
+
+    const req = client.requests[0]!;
+    expect(req.method).toBe('GET');
+    expect(req.url).toBe(`${BASE_URL}/compliance/transactions/99/document`);
+    expect((req.options?.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+    expect(doc.content).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder().decode(doc.content)).toBe('<?xml version="1.0"?><Invoice/>');
+    expect(doc.contentType).toBe('application/xml');
+    expect(doc.filename).toBe('RE-2027-0001.xml');
+  });
+
+  it('returns a null filename without Content-Disposition', async () => {
+    const { endpoint } = makeEndpoint([SequenceHttpClient.binaryResponse(new Uint8Array([1, 2, 3]))]);
+
+    const doc = await endpoint.getTransactionDocument(99);
+
+    expect(doc.filename).toBeNull();
+    expect(doc.contentType).toBe('application/octet-stream');
+    expect(Array.from(doc.content)).toEqual([1, 2, 3]);
+  });
+
+  it('throws HttpException 409 when the document is not available yet', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse(
+        { success: false, error: 'The e-invoice document is not available yet. Please try again in a few minutes.' },
+        409,
+      ),
+    ]);
+
+    const error = await endpoint.getTransactionDocument(99).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).statusCode).toBe(409);
+  });
+
+  it('rejects an invalid id without a request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(endpoint.getTransactionDocument(0)).rejects.toThrow('id must be a positive integer.');
+    expect(client.requests).toHaveLength(0);
+  });
+});
+
+describe('EReportingEndpoint.exportRevenueTaxRatesCsv', () => {
+  const CSV = 'month;currency;tax_rate;net;vat;gross;lines\r\n2026-07;EUR;20.00;100.00;20.00;120.00;1\r\n';
+
+  it('GETs tax-rates.csv with the filters and keeps the BOM', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.textResponse('﻿' + CSV, 200, 'text/csv; charset=UTF-8'),
+    ]);
+
+    const csv = await endpoint.exportRevenueTaxRatesCsv({
+      dateFrom: '2026-01-01',
+      dateTo: '2026-12-31',
+      transactionType: 'b2c_outbound',
+      state: 'submitted',
+    });
+
+    expect(csv).toBe('﻿' + CSV);
+    const req = client.requests[0]!;
+    expect(req.method).toBe('GET');
+    expect(req.url).toBe(
+      `${BASE_URL}/compliance/revenue-statistics/tax-rates.csv?date_from=2026-01-01&date_to=2026-12-31&transaction_type=b2c_outbound&state=submitted`,
+    );
+  });
+
+  it('sends no query string without filters', async () => {
+    const { endpoint, client } = makeEndpoint([SequenceHttpClient.textResponse(CSV, 200, 'text/csv')]);
+
+    expect(await endpoint.exportRevenueTaxRatesCsv()).toBe(CSV);
+    expect(client.requests[0]!.url).toBe(`${BASE_URL}/compliance/revenue-statistics/tax-rates.csv`);
+  });
+
+  it('maps a 422 to ValidationException', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse(
+        { message: 'The date to field must be a date after or equal to date from.', errors: { date_to: ['x'] } },
+        422,
+      ),
+    ]);
+
+    const error = await endpoint
+      .exportRevenueTaxRatesCsv({ dateFrom: '2026-12-31', dateTo: '2026-01-01' })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ValidationException);
+    expect((error as ValidationException).errors).toEqual({ date_to: ['x'] });
+  });
+});
+
+describe('EReportingEndpoint self-service plans', () => {
+  const OFFERINGS_PAYLOAD = {
+    data: [
+      {
+        country: 'NO',
+        service: 'e_invoicing',
+        currency: 'EUR',
+        active: false,
+        via_stripe: false,
+        plan: null,
+        status: null,
+        enrolled: false,
+        plans: [
+          {
+            key: 'standard',
+            monthly_fee: 99,
+            setup_fee: 0,
+            usage_tiers: [{ up_to: 100, price: 0 }],
+            volume_limit: null,
+            contact_only: false,
+            checkout_available: true,
+            requires: ['FR:e_reporting'],
+            eligible: true,
+          },
+        ],
+      },
+    ],
+    coverage: [
+      {
+        country: 'NO',
+        availability: 'bookable',
+        services: ['e_invoicing'],
+        network: 'peppol',
+        format: 'ehf',
+        mandate: null,
+      },
+    ],
+    access: { e_reporting: true, e_invoicing: false },
+    access_by_country: { FR: { e_reporting: true }, NO: { e_invoicing: false } },
+  };
+
+  it('getOfferings() maps plans, coverage and access', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(OFFERINGS_PAYLOAD)]);
+
+    const offerings = await endpoint.getOfferings();
+
+    expect(client.requests[0]!.method).toBe('GET');
+    expect(client.requests[0]!.url).toBe(`${BASE_URL}/compliance/offerings`);
+    expect(offerings).toBeInstanceOf(ComplianceOfferings);
+    expect(offerings.offerings[0]).toMatchObject({ country: 'NO', service: 'e_invoicing', viaStripe: false });
+    expect(offerings.offerings[0]!.plans[0]).toEqual({
+      key: 'standard',
+      monthlyFee: 99,
+      setupFee: 0,
+      usageTiers: [{ up_to: 100, price: 0 }],
+      volumeLimit: null,
+      contactOnly: false,
+      checkoutAvailable: true,
+      requires: ['FR:e_reporting'],
+      eligible: true,
+    });
+    expect(offerings.coverage[0]).toEqual({
+      country: 'NO',
+      availability: 'bookable',
+      services: ['e_invoicing'],
+      network: 'peppol',
+      format: 'ehf',
+      mandate: null,
+    });
+    expect(offerings.access).toEqual({ eReporting: true, eInvoicing: false });
+    expect(offerings.accessByCountry).toEqual({ FR: { e_reporting: true }, NO: { e_invoicing: false } });
+  });
+
+  it('createCheckout() POSTs country (upper-cased) and plan', async () => {
+    const { endpoint, client } = makeEndpoint([
+      envelope({ id: 'cs_test_123', url: 'https://checkout.stripe.com/c/pay/cs_test_123' }),
+    ]);
+
+    const session = await endpoint.createCheckout('no', 'standard');
+
+    const req = client.requests[0]!;
+    expect(req.method).toBe('POST');
+    expect(req.url).toBe(`${BASE_URL}/compliance/checkout`);
+    expect(JSON.parse(req.options?.body as string)).toEqual({ country: 'NO', plan: 'standard' });
+    expect(session).toEqual({ id: 'cs_test_123', url: 'https://checkout.stripe.com/c/pay/cs_test_123' });
+  });
+
+  it('createCheckout() rejects invalid input without a request and maps a 422', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({ success: false, error: 'This plan is already active.' }, 422),
+    ]);
+
+    await expect(endpoint.createCheckout('NOR', 'standard')).rejects.toThrow('country must be a 2-character');
+    await expect(endpoint.createCheckout('NO', '')).rejects.toThrow('plan must be a non-empty plan key');
+    expect(client.requests).toHaveLength(0);
+
+    const error = await endpoint.createCheckout('NO', 'standard').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ValidationException);
+    expect((error as ValidationException).message).toBe('This plan is already active.');
+  });
+
+  it('confirmCheckout() POSTs the session id and returns the plan state', async () => {
+    const { endpoint, client } = makeEndpoint([
+      envelope({ active: true, country: 'NO', service: 'e_invoicing', plan: 'standard', status: 'active' }),
+    ]);
+
+    const result = await endpoint.confirmCheckout('cs_test_123');
+
+    expect(client.requests[0]!.url).toBe(`${BASE_URL}/compliance/checkout/confirm`);
+    expect(JSON.parse(client.requests[0]!.options?.body as string)).toEqual({ session_id: 'cs_test_123' });
+    expect(result).toEqual({ active: true, country: 'NO', service: 'e_invoicing', plan: 'standard', status: 'active' });
+  });
+
+  it('confirmCheckout() tolerates an unknown session (nulls)', async () => {
+    const { endpoint } = makeEndpoint([
+      envelope({ active: false, country: null, service: null, plan: null, status: null }),
+    ]);
+
+    expect(await endpoint.confirmCheckout('cs_unknown')).toEqual({
+      active: false,
+      country: null,
+      service: null,
+      plan: null,
+      status: null,
+    });
+    await expect(endpoint.confirmCheckout(' ')).rejects.toThrow('sessionId must be a non-empty string');
+  });
+
+  it('createBillingPortalSession() POSTs and returns the portal URL; 404 without a Stripe plan', async () => {
+    const { endpoint, client } = makeEndpoint([
+      envelope({ url: 'https://billing.stripe.com/p/session/abc' }),
+      SequenceHttpClient.jsonResponse({ success: false, error: 'No plan was bought via Stripe.' }, 404),
+    ]);
+
+    expect(await endpoint.createBillingPortalSession()).toBe('https://billing.stripe.com/p/session/abc');
+    expect(client.requests[0]!.method).toBe('POST');
+    expect(client.requests[0]!.url).toBe(`${BASE_URL}/compliance/billing-portal`);
+
+    const error = await endpoint.createBillingPortalSession().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).statusCode).toBe(404);
+  });
+});
+
+describe('EReportingEndpoint per-country filters', () => {
+  it('sends compliance_enrollment_id on revenue statistics and the tax-rate CSV', async () => {
+    const { endpoint, client } = makeEndpoint([
+      envelope(STATS_PAYLOAD.data),
+      SequenceHttpClient.textResponse('a;b\r\n'),
+    ]);
+
+    await endpoint.getRevenueStatistics({ complianceEnrollmentId: 12 });
+    await endpoint.exportRevenueTaxRatesCsv({ complianceEnrollmentId: 12 });
+
+    expect(client.requests[0]!.url).toBe(`${BASE_URL}/compliance/revenue-statistics?compliance_enrollment_id=12`);
+    expect(client.requests[1]!.url).toBe(
+      `${BASE_URL}/compliance/revenue-statistics/tax-rates.csv?compliance_enrollment_id=12`,
+    );
+  });
+
+  it('rejects an invalid complianceEnrollmentId without a request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(endpoint.getRevenueStatistics({ complianceEnrollmentId: 0 })).rejects.toThrow(
+      'complianceEnrollmentId must be a positive integer.',
+    );
+    await expect(endpoint.exportRevenueTaxRatesCsv({ complianceEnrollmentId: 1.5 })).rejects.toThrow(
+      'complianceEnrollmentId must be a positive integer.',
+    );
+    expect(client.requests).toHaveLength(0);
+  });
+
+  it('listTaxReports() sends an upper-cased country filter', async () => {
+    const { endpoint, client } = makeEndpoint([pageEnvelope([], {})]);
+
+    await endpoint.listTaxReports(1, 25, undefined, 'no');
+
+    expect(client.requests[0]!.url).toBe(`${BASE_URL}/compliance/tax-reports?page=1&per_page=25&country=NO`);
+    await expect(endpoint.listTaxReports(1, 25, undefined, 'NOR')).rejects.toThrow('country must be a 2-character');
+  });
+
+  it('surfaces a read-only role 403 as HttpException with the body code', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse(
+        { success: false, message: 'Your role is read-only.', code: 'read_only_role' },
+        403,
+      ),
+    ]);
+
+    const error = await endpoint.deleteTransaction(99).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).statusCode).toBe(403);
+    expect((error as HttpException).responseBody).toContain('read_only_role');
   });
 });

@@ -5,6 +5,7 @@ import { Token } from '../../src/dto/Token.js';
 import { SequenceHttpClient } from '../fixtures/SequenceHttpClient.js';
 import { Environment } from '../../src/enums/Environment.js';
 import { AuthEndpoint } from '../../src/endpoints/AuthEndpoint.js';
+import { BillingEndpoint } from '../../src/endpoints/BillingEndpoint.js';
 import { VatEndpoint } from '../../src/endpoints/VatEndpoint.js';
 import { CompanyEndpoint } from '../../src/endpoints/CompanyEndpoint.js';
 import { EReportingEndpoint } from '../../src/endpoints/EReportingEndpoint.js';
@@ -39,13 +40,14 @@ function makeClient(responses: Response[], environment = Environment.SANDBOX) {
 }
 
 describe('TaxoraClient', () => {
-  it('exposes auth, vat, company, smartEnrichment and eReporting endpoints', () => {
+  it('exposes auth, vat, company, smartEnrichment, eReporting and billing endpoints', () => {
     const { taxoraClient } = makeClient([]);
     expect(taxoraClient.auth).toBeInstanceOf(AuthEndpoint);
     expect(taxoraClient.vat).toBeInstanceOf(VatEndpoint);
     expect(taxoraClient.company).toBeInstanceOf(CompanyEndpoint);
     expect(taxoraClient.smartEnrichment).toBeInstanceOf(SmartEnrichmentEndpoint);
     expect(taxoraClient.eReporting).toBeInstanceOf(EReportingEndpoint);
+    expect(taxoraClient.billing).toBeInstanceOf(BillingEndpoint);
   });
 
   it('wires smartEnrichment through the 401-refreshing client', async () => {

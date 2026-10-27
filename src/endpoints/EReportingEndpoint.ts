@@ -1,4 +1,5 @@
 import { ComplianceEnrollment } from '../dto/ComplianceEnrollment.js';
+import { ComplianceOfferings } from '../dto/ComplianceOfferings.js';
 import { ComplianceEnrollmentPage } from '../dto/ComplianceEnrollmentPage.js';
 import { ComplianceTaxReport } from '../dto/ComplianceTaxReport.js';
 import { ComplianceTaxReportPage } from '../dto/ComplianceTaxReportPage.js';
@@ -28,6 +29,9 @@ const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const NAF_CODE_REGEX = /^\d{2}$/;
 const COUNTRY_REGEX = /^[A-Za-z]{2}$/;
 const PEPPOL_SCHEME_REGEX = /^\d{4}$/;
+/** Server-side limit for an attached invoice PDF. */
+const INVOICE_PDF_MAX_BYTES = 10 * 1024 * 1024;
+const INVOICE_PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d]; // "%PDF-"
 
 /** Time-series bucket size accepted by the revenue statistics endpoint. */
 export type EReportingInterval = 'day' | 'week' | 'month';
@@ -69,6 +73,54 @@ export interface RevenueStatisticsFilters {
   interval?: EReportingInterval;
   transactionType?: ComplianceTransactionRequestType;
   state?: ComplianceTransactionRequestState;
+  /** Only this enrollment's transactions — one country's figures (e.g. France or Norway). */
+  complianceEnrollmentId?: number;
+}
+
+/** Filters for exportRevenueTaxRatesCsv() — the revenue statistics filters without `interval`. */
+export type RevenueTaxRatesCsvFilters = Omit<RevenueStatisticsFilters, 'interval'>;
+
+/** The legal e-invoice document of a sent transaction (getTransactionDocument()). */
+export interface ComplianceTransactionDocument {
+  /** Raw bytes as delivered by the network (e.g. the EHF/UBL XML). */
+  content: Uint8Array;
+  /** Content-Type header of the download, e.g. "application/xml". */
+  contentType: string;
+  /** Filename from Content-Disposition; null when the header is missing. */
+  filename: string | null;
+}
+
+/** createCheckout() result: open `url` in the browser to pay via Stripe Checkout. */
+export interface ComplianceCheckoutSession {
+  id: string;
+  url: string;
+}
+
+/** confirmCheckout() result: the plan state after the checkout. */
+export interface ComplianceCheckoutConfirmation {
+  active: boolean;
+  country: string | null;
+  service: string | null;
+  plan: string | null;
+  status: string | null;
+}
+
+/**
+ * The seller's own invoice PDF: raw bytes (Uint8Array — a Node Buffer works —
+ * or ArrayBuffer), base64-encoded by the SDK; or a string that is already
+ * base64 (a `data:application/pdf;base64,` prefix is accepted).
+ */
+export type ComplianceInvoicePdfInput = Uint8Array | ArrayBuffer | string;
+
+/**
+ * E-invoicing only: attach your own invoice PDF as the e-invoice's visual
+ * representation (max 10 MB). The structured e-invoice stays the legal
+ * document. Rejected with 422 when the country is not booked as e-invoicing.
+ */
+export interface ComplianceInvoicePdfFields {
+  invoicePdf?: ComplianceInvoicePdfInput;
+  /** Filename for the PDF (max 120 chars); defaults server-side to the invoice number. */
+  invoicePdfFilename?: string;
 }
 
 /**
@@ -194,7 +246,7 @@ export interface ComplianceTransactionBuyerInput {
   extraInfo?: string;
 }
 
-export interface CreateComplianceTransactionInput extends ComplianceTransactionBuyerInput {
+export interface CreateComplianceTransactionInput extends ComplianceTransactionBuyerInput, ComplianceInvoicePdfFields {
   complianceEnrollmentId: number;
   transactionType: ComplianceTransactionRequestType;
   invoiceNumber: string;
@@ -222,7 +274,7 @@ export interface CreateComplianceTransactionInput extends ComplianceTransactionB
   submitNow?: boolean;
 }
 
-export interface UpdateComplianceTransactionInput extends ComplianceTransactionBuyerInput {
+export interface UpdateComplianceTransactionInput extends ComplianceTransactionBuyerInput, ComplianceInvoicePdfFields {
   transactionType?: ComplianceTransactionRequestType;
   invoiceNumber?: string;
   invoiceDate?: Date | string;
@@ -289,6 +341,8 @@ export interface EReportingAccessRequestInput {
  *
  * Each country/service is unlocked (and billed) separately; enrolling for a
  * service the company does not have yields a 403 with code `service_not_active`.
+ * Write requests (create/update/delete/submit/import) by a user whose only role
+ * is read-only yield a 403 (HttpException) with body code `read_only_role`.
  * All routes except requestEReportingAccess() require compliance access on the
  * account.
  */
@@ -502,6 +556,7 @@ export class EReportingEndpoint {
     this.validateInvoiceLines(input.invoiceLines);
     this.validateOptionalCodes(input);
     this.validateBuyerFields(input);
+    this.validateInvoicePdfFilename(input.invoicePdfFilename);
 
     const body: Record<string, unknown> = {
       compliance_enrollment_id: input.complianceEnrollmentId,
@@ -566,6 +621,7 @@ export class EReportingEndpoint {
     if (input.invoiceLines !== undefined) this.validateInvoiceLines(input.invoiceLines);
     this.validateOptionalCodes(input);
     this.validateBuyerFields(input);
+    this.validateInvoicePdfFilename(input.invoicePdfFilename);
 
     const body: Record<string, unknown> = {};
     if (input.transactionType !== undefined) body['transaction_type'] = input.transactionType;
@@ -608,6 +664,30 @@ export class EReportingEndpoint {
   }
 
   /**
+   * Download the legal e-invoice document of a sent transaction (e-invoicing,
+   * e.g. the EHF/UBL XML for Norway). Available once `documentUrl` on the
+   * transaction is set.
+   *
+   * Errors: 404 (HttpException) for an unknown transaction; 409 (HttpException)
+   * when no document exists (yet) — e.g. e-reporting, not sent, or the network
+   * has not produced it yet (try again in a few minutes); 502 on provider failure.
+   */
+  async getTransactionDocument(id: number): Promise<ComplianceTransactionDocument> {
+    this.validateId(id, 'id');
+
+    const response = await this.sendDownloadRequest(`${this.baseUrl}/compliance/transactions/${id}/document`, '*/*');
+    if (!response.ok) {
+      await this.parseJsonResponse(response); // throws with the shared error mapping
+    }
+
+    return {
+      content: new Uint8Array(await response.arrayBuffer()),
+      contentType: response.headers.get('content-type') ?? 'application/octet-stream',
+      filename: this.filenameFromDisposition(response.headers.get('content-disposition')),
+    };
+  }
+
+  /**
    * Bulk-import transactions from a semicolon-separated CSV (one row per invoice
    * line; rows sharing an invoice_number are grouped into one transaction).
    * Required columns: invoice_number, invoice_date, transaction_type, subtotal,
@@ -646,6 +726,9 @@ export class EReportingEndpoint {
    * months and a monthly interval.
    */
   async getRevenueStatistics(filters: RevenueStatisticsFilters = {}): Promise<RevenueStatistics> {
+    if (filters.complianceEnrollmentId !== undefined) {
+      this.validateId(filters.complianceEnrollmentId, 'complianceEnrollmentId');
+    }
     if (filters.interval !== undefined && !INTERVALS.includes(filters.interval)) {
       throw new TaxoraException(
         `Invalid statistics interval "${String(filters.interval)}". Expected one of: ${INTERVALS.join(', ')}.`,
@@ -658,6 +741,9 @@ export class EReportingEndpoint {
     if (filters.interval !== undefined) params.set('interval', filters.interval);
     if (filters.transactionType !== undefined) params.set('transaction_type', filters.transactionType);
     if (filters.state !== undefined) params.set('state', filters.state);
+    if (filters.complianceEnrollmentId !== undefined) {
+      params.set('compliance_enrollment_id', String(filters.complianceEnrollmentId));
+    }
 
     const queryString = params.toString();
     const url = `${this.baseUrl}/compliance/revenue-statistics${queryString ? `?${queryString}` : ''}`;
@@ -666,6 +752,37 @@ export class EReportingEndpoint {
     const data = await this.parseJsonResponse(response);
 
     return RevenueStatistics.fromArray(data);
+  }
+
+  /**
+   * Net and VAT per month, currency and tax rate as raw CSV (semicolon-separated,
+   * computed from the invoice lines) — for reconciling the reported figures with
+   * your VAT return. Same filters as getRevenueStatistics() (without
+   * `interval`); defaults to the last 12 months. The body is returned verbatim,
+   * a UTF-8 BOM included when the API sends one.
+   */
+  async exportRevenueTaxRatesCsv(filters: RevenueTaxRatesCsvFilters = {}): Promise<string> {
+    if (filters.complianceEnrollmentId !== undefined) {
+      this.validateId(filters.complianceEnrollmentId, 'complianceEnrollmentId');
+    }
+    const params = new URLSearchParams();
+    if (filters.dateFrom !== undefined) params.set('date_from', this.formatDate(filters.dateFrom));
+    if (filters.dateTo !== undefined) params.set('date_to', this.formatDate(filters.dateTo));
+    if (filters.transactionType !== undefined) params.set('transaction_type', filters.transactionType);
+    if (filters.state !== undefined) params.set('state', filters.state);
+    if (filters.complianceEnrollmentId !== undefined) {
+      params.set('compliance_enrollment_id', String(filters.complianceEnrollmentId));
+    }
+
+    const queryString = params.toString();
+    const url = `${this.baseUrl}/compliance/revenue-statistics/tax-rates.csv${queryString ? `?${queryString}` : ''}`;
+
+    const response = await this.sendDownloadRequest(url, 'text/csv, application/json');
+    if (!response.ok) {
+      await this.parseJsonResponse(response); // throws with the shared 422/HTTP error mapping
+    }
+    // Not response.text(): it drops the BOM, which Excel needs to read the file as UTF-8.
+    return new TextDecoder('utf-8', { ignoreBOM: true }).decode(await response.arrayBuffer());
   }
 
   /**
@@ -685,16 +802,25 @@ export class EReportingEndpoint {
     return VatRates.fromArray(data);
   }
 
-  /** Paginated list of the company's tax reports (newest first), optionally filtered by state. */
+  /**
+   * Paginated list of the company's tax reports (newest first), optionally
+   * filtered by state and by country (2-letter ISO code, case-insensitive).
+   */
   async listTaxReports(
     page = 1,
     perPage = 25,
     state?: ComplianceTaxReportRequestState,
+    country?: string,
   ): Promise<ComplianceTaxReportPage> {
+    if (country !== undefined && !COUNTRY_REGEX.test(country)) {
+      throw new TaxoraException('country must be a 2-character ISO 3166-1 alpha-2 code.');
+    }
+
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('per_page', String(perPage));
     if (state !== undefined) params.set('state', state);
+    if (country !== undefined) params.set('country', country.toUpperCase());
 
     const response = await this.sendRequest('GET', `${this.baseUrl}/compliance/tax-reports?${params.toString()}`);
     return ComplianceTaxReportPage.fromResponse(await this.parseJsonResponse(response));
@@ -740,6 +866,77 @@ export class EReportingEndpoint {
 
     const response = await this.sendRequest('POST', `${this.baseUrl}/compliance/e-reporting-request`, body);
     await this.parseJsonResponse(response);
+  }
+
+  // ---------------------------------------------------------------------
+  // Self-service plans (Stripe) — not gated by compliance access
+  // ---------------------------------------------------------------------
+
+  /**
+   * Bookable compliance plans per country (net EUR prices), every country
+   * Taxora reaches, and which services the company has unlocked. Works for
+   * companies without compliance access.
+   */
+  async getOfferings(): Promise<ComplianceOfferings> {
+    const response = await this.sendRequest('GET', `${this.baseUrl}/compliance/offerings`);
+    return ComplianceOfferings.fromArray(await this.parseJsonResponse(response));
+  }
+
+  /**
+   * Start a Stripe Checkout for a plan (see getOfferings() — `checkoutAvailable`).
+   * Open the returned `url` in the browser. After payment Stripe redirects to
+   * the Taxora portal, which activates the plan; call confirmCheckout() with the
+   * session id to activate it from your side (idempotent).
+   *
+   * Errors: 422 (ValidationException) for an unknown or contact-only plan or a
+   * plan that is already active; 502 (HttpException) on a Stripe error.
+   */
+  async createCheckout(country: string, plan: string): Promise<ComplianceCheckoutSession> {
+    if (!COUNTRY_REGEX.test(country)) {
+      throw new TaxoraException('country must be a 2-character ISO 3166-1 alpha-2 code.');
+    }
+    if (plan.trim() === '' || plan.length > 30) {
+      throw new TaxoraException('plan must be a non-empty plan key of at most 30 characters.');
+    }
+
+    const response = await this.sendRequest('POST', `${this.baseUrl}/compliance/checkout`, {
+      country: country.toUpperCase(),
+      plan,
+    });
+    const data = await this.parseJsonResponse(response);
+    return { id: String(data['id'] ?? ''), url: String(data['url'] ?? '') };
+  }
+
+  /** Confirm a finished Stripe Checkout and activate its plan. Idempotent. */
+  async confirmCheckout(sessionId: string): Promise<ComplianceCheckoutConfirmation> {
+    if (sessionId.trim() === '' || sessionId.length > 255) {
+      throw new TaxoraException('sessionId must be a non-empty string of at most 255 characters.');
+    }
+
+    const response = await this.sendRequest('POST', `${this.baseUrl}/compliance/checkout/confirm`, {
+      session_id: sessionId,
+    });
+    const data = await this.parseJsonResponse(response);
+    const str = (value: unknown): string | null => (typeof value === 'string' ? value : null);
+
+    return {
+      active: data['active'] === true,
+      country: str(data['country']),
+      service: str(data['service']),
+      plan: str(data['plan']),
+      status: str(data['status']),
+    };
+  }
+
+  /**
+   * URL of the Stripe billing portal for the company's compliance plans
+   * (invoices, payment method, cancellation). The portal returns to the Taxora
+   * portal. 404 (HttpException) when no plan was bought via Stripe.
+   */
+  async createBillingPortalSession(): Promise<string> {
+    const response = await this.sendRequest('POST', `${this.baseUrl}/compliance/billing-portal`);
+    const data = await this.parseJsonResponse(response);
+    return String(data['url'] ?? '');
   }
 
   // ---------------------------------------------------------------------
@@ -888,6 +1085,12 @@ export class EReportingEndpoint {
     });
   }
 
+  private validateInvoicePdfFilename(filename: string | undefined): void {
+    if (filename !== undefined && filename.length > 120) {
+      throw new TaxoraException('invoicePdfFilename must not exceed 120 characters.');
+    }
+  }
+
   private validateOptionalCodes(input: { currency?: string; counterpartyCountry?: string }): void {
     if (input.currency !== undefined && input.currency.length !== 3) {
       throw new TaxoraException('currency must be a 3-character ISO 4217 code.');
@@ -979,6 +1182,31 @@ export class EReportingEndpoint {
     if (input.amendedNumber !== undefined) body['amended_number'] = input.amendedNumber;
     if (input.amendedDate !== undefined) body['amended_date'] = this.formatDate(input.amendedDate);
     if (input.extraInfo !== undefined) body['extra_info'] = input.extraInfo;
+    if (input.invoicePdf !== undefined) body['invoice_pdf'] = this.encodeInvoicePdf(input.invoicePdf);
+    if (input.invoicePdfFilename !== undefined) body['invoice_pdf_filename'] = input.invoicePdfFilename;
+  }
+
+  /** Bytes → base64 (validated as a PDF of at most 10 MB); strings are taken as already base64. */
+  private encodeInvoicePdf(pdf: ComplianceInvoicePdfInput): string {
+    if (typeof pdf === 'string') {
+      if (pdf.trim() === '') {
+        throw new TaxoraException('invoicePdf must not be empty.');
+      }
+      return pdf;
+    }
+
+    const bytes = pdf instanceof Uint8Array ? pdf : new Uint8Array(pdf);
+    if (bytes.byteLength === 0) {
+      throw new TaxoraException('invoicePdf must not be empty.');
+    }
+    if (bytes.byteLength > INVOICE_PDF_MAX_BYTES) {
+      throw new TaxoraException('invoicePdf must not exceed 10 MB.');
+    }
+    if (!INVOICE_PDF_MAGIC.every((byte, index) => bytes[index] === byte)) {
+      throw new TaxoraException('invoicePdf must be a PDF file (content must start with "%PDF-").');
+    }
+
+    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64');
   }
 
   // ---------------------------------------------------------------------
@@ -1009,6 +1237,31 @@ export class EReportingEndpoint {
     // RetryPolicy). Writes are not: a gateway timeout does not tell us whether
     // the API already processed them.
     return method === 'GET' ? withResponseRetries(this.retryPolicy, 'e-reporting request', send) : send();
+  }
+
+  /** GET for a non-JSON download (CSV / document): no JSON Content-Type, retried like other GETs. */
+  private async sendDownloadRequest(url: string, accept: string): Promise<Response> {
+    const headers = this.buildHeaders(false);
+    headers['Accept'] = accept;
+    return withResponseRetries(this.retryPolicy, 'e-reporting download', () =>
+      this.httpClient.request('GET', url, { headers }),
+    );
+  }
+
+  /** `attachment; filename="x.xml"` (or RFC 5987 `filename*=UTF-8''x.xml`) → "x.xml". */
+  private filenameFromDisposition(header: string | null): string | null {
+    if (header === null) return null;
+    const extended = /filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)/.exec(header);
+    if (extended?.[1] !== undefined) {
+      try {
+        return decodeURIComponent(extended[1].trim());
+      } catch {
+        // fall through to the plain parameter
+      }
+    }
+    const plain = /filename\s*=\s*"([^"]*)"|filename\s*=\s*([^;]+)/.exec(header);
+    const name = (plain?.[1] ?? plain?.[2])?.trim();
+    return name !== undefined && name !== '' ? name : null;
   }
 
   /** Multipart upload: Content-Type is left to fetch so the boundary is set correctly. */

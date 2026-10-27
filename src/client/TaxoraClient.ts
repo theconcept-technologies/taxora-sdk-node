@@ -1,4 +1,5 @@
 import { AuthEndpoint } from '../endpoints/AuthEndpoint.js';
+import { BillingEndpoint } from '../endpoints/BillingEndpoint.js';
 import { CompanyEndpoint } from '../endpoints/CompanyEndpoint.js';
 import { EReportingEndpoint } from '../endpoints/EReportingEndpoint.js';
 import { SmartEnrichmentEndpoint } from '../endpoints/SmartEnrichmentEndpoint.js';
@@ -27,6 +28,7 @@ export class TaxoraClient {
   public readonly company: CompanyEndpoint;
   public readonly smartEnrichment: SmartEnrichmentEndpoint;
   public readonly eReporting: EReportingEndpoint;
+  public readonly billing: BillingEndpoint;
   public readonly baseUrl: string;
 
   constructor(options: TaxoraClientOptions) {
@@ -56,5 +58,6 @@ export class TaxoraClient {
       retryPolicy,
     );
     this.eReporting = new EReportingEndpoint(this.baseUrl, options.apiKey, tokenStorage, retryClient, retryPolicy);
+    this.billing = new BillingEndpoint(this.baseUrl, options.apiKey, tokenStorage, retryClient, retryPolicy);
   }
 }

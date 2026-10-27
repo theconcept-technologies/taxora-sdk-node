@@ -3,6 +3,8 @@ export const ComplianceTransactionState = {
   SENDING: 'sending',
   SUBMITTED: 'submitted',
   ERROR: 'error',
+  /** E-invoicing only: the buyer cannot receive e-invoices — nothing was sent or billed; send your regular invoice. */
+  NOT_REQUIRED: 'not_required',
   UNKNOWN: 'unknown',
 } as const;
 
@@ -26,6 +28,8 @@ const DESCRIPTIONS: Record<ComplianceTransactionState, string> = {
   [ComplianceTransactionState.SENDING]: 'Submission to the provider in progress.',
   [ComplianceTransactionState.SUBMITTED]: 'Successfully submitted to the provider.',
   [ComplianceTransactionState.ERROR]: 'Submission failed. See submissionError.',
+  [ComplianceTransactionState.NOT_REQUIRED]:
+    'The buyer cannot receive e-invoices, so none was sent or billed. Send your regular invoice instead.',
   [ComplianceTransactionState.UNKNOWN]: 'Unknown state.',
 };
 
