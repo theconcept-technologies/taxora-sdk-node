@@ -80,7 +80,7 @@ export interface ComplianceTransactionWebhookObject {
 }
 
 /** True when the buyer refused the e-invoice (false for older deliveries without the field). */
-export function isBuyerRejected(object: ComplianceTransactionWebhookObject): boolean {
+export function isTransactionBuyerRejected(object: ComplianceTransactionWebhookObject): boolean {
   return object.buyer_rejected === true;
 }
 

@@ -1162,7 +1162,7 @@ never sent twice for the same state and never for the transient `sending`. Besid
 optional in the type because older deliveries lack them.
 
 ```ts
-import { isBuyerRejected } from '@taxora/sdk';
+import { isTransactionBuyerRejected } from '@taxora/sdk';
 
 if (event.event === 'compliance.transaction.state_changed') {
   const tx = event.data.object;
@@ -1170,7 +1170,7 @@ if (event.event === 'compliance.transaction.state_changed') {
     // The buyer cannot receive e-invoices (tx.delivery_check e.g. 'not_reachable'):
     // nothing was sent or billed — send your PDF to the buyer by e-mail yourself.
   }
-  if (isBuyerRejected(tx)) {
+  if (isTransactionBuyerRejected(tx)) {
     // The buyer refused the e-invoice (tx.rejection_reason) — issue a credit note.
   }
   if (tx.state === 'error') console.warn(tx.submission_error);

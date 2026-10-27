@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   constructWebhookEvent,
   generateWebhookSignatureHeader,
-  isBuyerRejected,
+  isTransactionBuyerRejected,
   type ComplianceTransactionWebhookObject,
 } from '../../src/index.js';
 
@@ -44,7 +44,7 @@ describe('compliance.transaction.state_changed payload', () => {
     expect(tx.provider_state).toBe('refused');
     expect(tx.previous_provider_state).toBe('accepted');
     expect(tx.rejection_reason).toBe('Wrong order number');
-    expect(isBuyerRejected(tx)).toBe(true);
+    expect(isTransactionBuyerRejected(tx)).toBe(true);
   });
 
   it('exposes not_required with the delivery check and errors with the submission error', () => {
@@ -58,7 +58,7 @@ describe('compliance.transaction.state_changed payload', () => {
       delivery_check: 'not_reachable',
     };
     expect(notRequired.delivery_check).toBe('not_reachable');
-    expect(isBuyerRejected(notRequired)).toBe(false);
+    expect(isTransactionBuyerRejected(notRequired)).toBe(false);
 
     const event = signedTransactionEvent({
       id: 90,
@@ -77,7 +77,7 @@ describe('compliance.transaction.state_changed payload', () => {
       country: 'no',
       invoice_number: 'NO-1',
     };
-    expect(isBuyerRejected(older)).toBe(false);
+    expect(isTransactionBuyerRejected(older)).toBe(false);
     expect(older.previous_state).toBeUndefined();
   });
 });

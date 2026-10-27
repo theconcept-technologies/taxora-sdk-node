@@ -196,7 +196,7 @@ export type {
   WebhookSignatureErrorReason,
   ParsedWebhookSignatureHeader,
 } from './webhooks/WebhookSignature.js';
-export { isBuyerRejected } from './webhooks/WebhookEvent.js';
+export { isTransactionBuyerRejected } from './webhooks/WebhookEvent.js';
 export type {
   WebhookEventType,
   WebhookEventEnvelope,
