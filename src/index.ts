@@ -41,6 +41,9 @@ export type {
   ComplianceTransactionDocument,
   ComplianceCheckoutSession,
   ComplianceCheckoutConfirmation,
+  ComplianceNotificationDigest,
+  ComplianceNotificationSettings,
+  UpdateComplianceNotificationSettingsInput,
   ComplianceInvoicePdfInput,
   ComplianceInvoicePdfFields,
 } from './endpoints/EReportingEndpoint.js';

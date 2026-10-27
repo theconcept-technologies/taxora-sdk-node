@@ -2360,6 +2360,127 @@ describe('EReportingEndpoint self-service plans', () => {
   });
 });
 
+describe('EReportingEndpoint notification settings', () => {
+  const SETTINGS = {
+    recipients: ['accounting@example.com', 'cfo@example.com'],
+    language: 'en',
+    not_on_peppol: true,
+    digest: 'weekly',
+    digest_sent_at: '2026-10-26T08:00:00+00:00',
+  };
+
+  it('getNotificationSettings() GETs and maps to camelCase', async () => {
+    const { endpoint, client } = makeEndpoint([
+      envelope(SETTINGS),
+      envelope({ recipients: [], language: 'de', not_on_peppol: false, digest: 'off', digest_sent_at: null }),
+    ]);
+
+    expect(await endpoint.getNotificationSettings()).toEqual({
+      recipients: ['accounting@example.com', 'cfo@example.com'],
+      language: 'en',
+      notOnPeppol: true,
+      digest: 'weekly',
+      digestSentAt: '2026-10-26T08:00:00+00:00',
+    });
+    expect(client.requests[0]!.method).toBe('GET');
+    expect(client.requests[0]!.url).toBe(`${BASE_URL}/compliance/notification-settings`);
+
+    expect(await endpoint.getNotificationSettings()).toEqual({
+      recipients: [],
+      language: 'de',
+      notOnPeppol: false,
+      digest: 'off',
+      digestSentAt: null,
+    });
+  });
+
+  it('updateNotificationSettings() PUTs only the provided fields in snake_case', async () => {
+    const { endpoint, client } = makeEndpoint([envelope({ ...SETTINGS, digest: 'daily' }), envelope(SETTINGS)]);
+
+    const result = await endpoint.updateNotificationSettings({
+      recipients: [' accounting@example.com ', 'cfo@example.com'],
+      language: 'en',
+      notOnPeppol: true,
+      digest: 'daily',
+    });
+
+    expect(client.requests[0]!.method).toBe('PUT');
+    expect(client.requests[0]!.url).toBe(`${BASE_URL}/compliance/notification-settings`);
+    expect(JSON.parse(client.requests[0]!.options?.body as string)).toEqual({
+      recipients: ['accounting@example.com', 'cfo@example.com'],
+      language: 'en',
+      not_on_peppol: true,
+      digest: 'daily',
+    });
+    expect(result.digest).toBe('daily');
+    expect(result.notOnPeppol).toBe(true);
+
+    await endpoint.updateNotificationSettings({ notOnPeppol: false });
+    expect(JSON.parse(client.requests[1]!.options?.body as string)).toEqual({ not_on_peppol: false });
+  });
+
+  it('updateNotificationSettings() can clear the recipients', async () => {
+    const { endpoint, client } = makeEndpoint([
+      envelope({ recipients: [], language: 'de', not_on_peppol: false, digest: 'off', digest_sent_at: null }),
+    ]);
+
+    await endpoint.updateNotificationSettings({ recipients: [], digest: 'off' });
+    expect(JSON.parse(client.requests[0]!.options?.body as string)).toEqual({ recipients: [], digest: 'off' });
+  });
+
+  it('rejects invalid input without a request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(endpoint.updateNotificationSettings({})).rejects.toThrow('requires at least one field');
+    await expect(
+      endpoint.updateNotificationSettings({ recipients: ['a@x.io', 'b@x.io', 'c@x.io', 'd@x.io', 'e@x.io', 'f@x.io'] }),
+    ).rejects.toThrow('recipients must not contain more than 5 entries.');
+    await expect(endpoint.updateNotificationSettings({ recipients: ['not-an-email'] })).rejects.toThrow(
+      'recipients[0] must be a valid email address.',
+    );
+    await expect(endpoint.updateNotificationSettings({ recipients: ['ok@x.io', '  '] })).rejects.toThrow(
+      'recipients[1] must be a valid email address.',
+    );
+    await expect(endpoint.updateNotificationSettings({ language: 'fr' as unknown as 'de' })).rejects.toThrow(
+      'Invalid language "fr"',
+    );
+    await expect(endpoint.updateNotificationSettings({ digest: 'monthly' as unknown as 'daily' })).rejects.toThrow(
+      'Invalid digest "monthly"',
+    );
+    await expect(endpoint.updateNotificationSettings({ notOnPeppol: 'yes' as unknown as boolean })).rejects.toThrow(
+      'notOnPeppol must be a boolean.',
+    );
+    expect(client.requests).toHaveLength(0);
+  });
+
+  it('switching an email on without recipients surfaces the 422 as ValidationException', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse(
+        { success: false, error: 'Add at least one recipient to switch an email on.' },
+        422,
+      ),
+    ]);
+
+    const error = await endpoint.updateNotificationSettings({ digest: 'weekly' }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ValidationException);
+    expect((error as ValidationException).message).toBe('Add at least one recipient to switch an email on.');
+  });
+
+  it('surfaces a non-admin 403 as HttpException with the body code', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse(
+        { success: false, message: 'Only company admins can change this.', code: 'admin_only' },
+        403,
+      ),
+    ]);
+
+    const error = await endpoint.updateNotificationSettings({ digest: 'daily' }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).statusCode).toBe(403);
+    expect((error as HttpException).responseBody).toContain('admin_only');
+  });
+});
+
 describe('EReportingEndpoint per-country filters', () => {
   it('sends compliance_enrollment_id on revenue statistics and the tax-rate CSV', async () => {
     const { endpoint, client } = makeEndpoint([

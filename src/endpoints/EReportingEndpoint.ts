@@ -15,6 +15,7 @@ import { type ComplianceService } from '../enums/ComplianceService.js';
 import { type ComplianceTaxReportState } from '../enums/ComplianceTaxReportState.js';
 import { type ComplianceTransactionState } from '../enums/ComplianceTransactionState.js';
 import { type ComplianceTransactionType } from '../enums/ComplianceTransactionType.js';
+import { type Language } from '../enums/Language.js';
 import { HttpException } from '../exceptions/HttpException.js';
 import { describeApiError } from '../exceptions/apiErrorMessage.js';
 import { TaxoraException } from '../exceptions/TaxoraException.js';
@@ -58,6 +59,10 @@ const INTERVALS: readonly EReportingInterval[] = ['day', 'week', 'month'];
 const SERVICES: readonly ComplianceRequestService[] = ['e_reporting', 'e_invoicing'];
 const ENTERPRISE_SIZES: readonly ComplianceEnterpriseSize[] = ['micro', 'pme', 'eti', 'ge'];
 const TYPE_OPERATIONS: readonly ComplianceTypeOperation[] = ['services', 'goods', 'mixed'];
+const NOTIFICATION_LANGUAGES: readonly Language[] = ['de', 'en'];
+const NOTIFICATION_DIGESTS: readonly ComplianceNotificationDigest[] = ['off', 'daily', 'weekly'];
+/** Server limit for notification-settings recipients. */
+const NOTIFICATION_MAX_RECIPIENTS = 5;
 const TRANSACTION_TYPES: readonly ComplianceTransactionRequestType[] = [
   'b2c_outbound',
   'b2b_domestic_outbound',
@@ -94,6 +99,31 @@ export interface ComplianceTransactionDocument {
 export interface ComplianceCheckoutSession {
   id: string;
   url: string;
+}
+
+/** Digest email schedule: daily at 08:00 for the day before, weekly on Mondays for the last 7 days. */
+export type ComplianceNotificationDigest = 'off' | 'daily' | 'weekly';
+
+/** getNotificationSettings() / updateNotificationSettings() result: the company's opt-in compliance emails. */
+export interface ComplianceNotificationSettings {
+  /** Up to 5 email addresses (lower-cased by the server). */
+  recipients: string[];
+  /** Language of the emails. */
+  language: Language;
+  /** Email (at most hourly) listing new invoices held back because the buyer is not on Peppol. */
+  notOnPeppol: boolean;
+  digest: ComplianceNotificationDigest;
+  /** ISO 8601 timestamp of the last digest sent; null when none was sent yet. */
+  digestSentAt: string | null;
+}
+
+/** updateNotificationSettings() input: only the provided fields change (at least one is required). */
+export interface UpdateComplianceNotificationSettingsInput {
+  /** Replaces the whole list (max 5 addresses); `[]` clears it. */
+  recipients?: string[];
+  language?: Language;
+  notOnPeppol?: boolean;
+  digest?: ComplianceNotificationDigest;
 }
 
 /** confirmCheckout() result: the plan state after the checkout. */
@@ -990,6 +1020,95 @@ export class EReportingEndpoint {
     const response = await this.sendRequest('POST', `${this.baseUrl}/compliance/billing-portal`);
     const data = await this.parseJsonResponse(response);
     return String(data['url'] ?? '');
+  }
+
+  // ---------------------------------------------------------------------
+  // Notification emails
+  // ---------------------------------------------------------------------
+
+  /**
+   * The company's opt-in e-reporting / e-invoicing emails: recipients, language,
+   * the "buyer not on Peppol" email and the digest. Readable by every member.
+   */
+  async getNotificationSettings(): Promise<ComplianceNotificationSettings> {
+    const response = await this.sendRequest('GET', `${this.baseUrl}/compliance/notification-settings`);
+    return this.toNotificationSettings(await this.parseJsonResponse(response));
+  }
+
+  /**
+   * Change the company's e-reporting / e-invoicing emails; only the provided
+   * fields change. `notOnPeppol` only reports invoices held back after it was
+   * switched on.
+   *
+   * Errors: 422 (ValidationException) when an email is switched on without any
+   * recipient; 403 (HttpException, body code `admin_only` or `read_only_role`)
+   * for users who are not company admins.
+   */
+  async updateNotificationSettings(
+    input: UpdateComplianceNotificationSettingsInput,
+  ): Promise<ComplianceNotificationSettings> {
+    const body: Record<string, unknown> = {};
+
+    if (input.recipients !== undefined) {
+      if (!Array.isArray(input.recipients)) {
+        throw new TaxoraException('recipients must be an array of email addresses.');
+      }
+      if (input.recipients.length > NOTIFICATION_MAX_RECIPIENTS) {
+        throw new TaxoraException(`recipients must not contain more than ${NOTIFICATION_MAX_RECIPIENTS} entries.`);
+      }
+      body['recipients'] = input.recipients.map((recipient, index) => {
+        const email = typeof recipient === 'string' ? recipient.trim() : recipient;
+        this.validateEmail(email, `recipients[${index}]`);
+        if (email.length > 191) {
+          throw new TaxoraException(`recipients[${index}] must not exceed 191 characters.`);
+        }
+        return email;
+      });
+    }
+    if (input.language !== undefined) {
+      if (!NOTIFICATION_LANGUAGES.includes(input.language)) {
+        throw new TaxoraException(
+          `Invalid language "${String(input.language)}". Expected one of: ${NOTIFICATION_LANGUAGES.join(', ')}.`,
+        );
+      }
+      body['language'] = input.language;
+    }
+    if (input.notOnPeppol !== undefined) {
+      if (typeof input.notOnPeppol !== 'boolean') {
+        throw new TaxoraException('notOnPeppol must be a boolean.');
+      }
+      body['not_on_peppol'] = input.notOnPeppol;
+    }
+    if (input.digest !== undefined) {
+      if (!NOTIFICATION_DIGESTS.includes(input.digest)) {
+        throw new TaxoraException(
+          `Invalid digest "${String(input.digest)}". Expected one of: ${NOTIFICATION_DIGESTS.join(', ')}.`,
+        );
+      }
+      body['digest'] = input.digest;
+    }
+
+    if (Object.keys(body).length === 0) {
+      throw new TaxoraException('updateNotificationSettings requires at least one field to update.');
+    }
+
+    const response = await this.sendRequest('PUT', `${this.baseUrl}/compliance/notification-settings`, body);
+    return this.toNotificationSettings(await this.parseJsonResponse(response));
+  }
+
+  private toNotificationSettings(data: Record<string, unknown>): ComplianceNotificationSettings {
+    const recipients = Array.isArray(data['recipients'])
+      ? data['recipients'].filter((r): r is string => typeof r === 'string' && r !== '')
+      : [];
+    const digest = data['digest'];
+
+    return {
+      recipients,
+      language: data['language'] === 'en' ? 'en' : 'de',
+      notOnPeppol: data['not_on_peppol'] === true,
+      digest: digest === 'daily' || digest === 'weekly' ? digest : 'off',
+      digestSentAt: typeof data['digest_sent_at'] === 'string' ? data['digest_sent_at'] : null,
+    };
   }
 
   // ---------------------------------------------------------------------

@@ -935,6 +935,30 @@ const state = await client.eReporting.confirmCheckout(session.id); // idempotent
 const portalUrl = await client.eReporting.createBillingPortalSession(); // invoices, payment method, cancel; 404 without a Stripe plan
 ```
 
+### Notification emails
+
+Opt-in e-reporting / e-invoicing emails for your company — readable by every member, changeable by company **admins**
+only.
+
+```ts
+const settings = await client.eReporting.getNotificationSettings();
+// { recipients: ['accounting@example.com'], language: 'de' | 'en', notOnPeppol: boolean,
+//   digest: 'off' | 'daily' | 'weekly', digestSentAt: string | null }
+
+// Only the provided fields change (at least one is required); recipients replaces the whole list (max 5):
+await client.eReporting.updateNotificationSettings({
+  recipients: ['accounting@example.com', 'cfo@example.com'],
+  language: 'en',
+  notOnPeppol: true, // hourly email listing invoices held back because the buyer is not on Peppol
+  digest: 'weekly', // 'daily' = 08:00 for the day before, 'weekly' = Mondays for the last 7 days
+});
+```
+
+Invalid input (more than 5 or invalid addresses, unknown `language` / `digest`, no field) throws a `TaxoraException`
+before any request. Switching an email on without any recipient answers `422` (`ValidationException`); a non-admin
+gets `403` with body code `admin_only` (or `read_only_role`) as `HttpException`. `notOnPeppol` only reports invoices
+held back after it was switched on.
+
 ### Billing usage summaries
 
 Read-only usage of your billable modules (E-Reporting / E-Invoicing, Smart Enrichment), per feature and billing
@@ -1039,8 +1063,8 @@ untouched body stays available via `err.getResponseBody()`.
 (`err.getResponseBody()`): `service_not_active` (the company has not booked the service/country),
 `read_only_role` (a write request — create, update, delete, submit, import — by a user whose only role is
 read-only) or `admin_only` (body `{ message, code: 'admin_only' }`: a developer-role user tried to create an
-enrollment, `createCheckout()`, `confirmCheckout()` or `createBillingPortalSession()` — only admins can add
-countries or change plans).
+enrollment, `createCheckout()`, `confirmCheckout()`, `createBillingPortalSession()` or
+`updateNotificationSettings()` — only admins can add countries, change plans or change the notification emails).
 
 ### Automatic retries
 

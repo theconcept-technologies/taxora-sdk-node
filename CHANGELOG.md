@@ -6,6 +6,13 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ### Added
 
+- **`eReporting.getNotificationSettings()` / `eReporting.updateNotificationSettings(input)`** —
+  `GET` / `PUT /compliance/notification-settings`: the company's opt-in compliance emails as
+  `ComplianceNotificationSettings` (`{ recipients, language, notOnPeppol, digest, digestSentAt }`). `notOnPeppol` =
+  hourly email listing invoices held back because the buyer is not on Peppol; `digest` = `'off' | 'daily' | 'weekly'`
+  summary. Updates send only the provided fields (`UpdateComplianceNotificationSettingsInput`, at least one; max 5
+  recipients, validated before the request); 422 when an email is switched on without recipients, 403 `admin_only` /
+  `read_only_role` for non-admins.
 - **`eReporting.exportTransactionsCsv(filters)`** — `GET /compliance/transactions/export.csv`: all transactions
   matching the `listTransactions()` filters (without pagination, type `ComplianceTransactionExportFilters`) as a
   semicolon-separated CSV for bookkeeping, incl. internal reference, delivery state, buyer rejection and ECB EUR
