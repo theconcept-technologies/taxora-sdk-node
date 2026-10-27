@@ -631,6 +631,7 @@ const tx = await client.eReporting.createTransaction({
       taxes: [{ name: 'TVA', percent: 20, category: 'S' }], // category E needs a VATEX `comment`
     },
   ],
+  internalReference: 'ORDER-4711', // optional, max 100: your own reference (order no., ERP id) — never sent to the buyer or the tax authority
   submitNow: false, // record now, submit later
 });
 
@@ -646,11 +647,14 @@ const transactions = await client.eReporting.listTransactions({
   transactionType: 'b2c_outbound',
   complianceEnrollmentId: enrollment.id, // optional: one enrollment only
   country: 'FR', // optional: one country only
+  search: 'ACME', // optional: contains-match over invoice number, internal reference and buyer name
+  internalReference: 'ORDER-4711', // optional: exact match on your internal reference
   page: 1,
   perPage: 25,
 });
 const one = await client.eReporting.getTransaction(tx.id);
 await client.eReporting.updateTransaction(tx.id, { total: 130, taxAmount: 21.67 });
+await client.eReporting.updateTransaction(tx.id, { internalReference: '' }); // empty string clears it
 await client.eReporting.deleteTransaction(tx.id); // resolves void on 204
 ```
 
@@ -658,7 +662,8 @@ await client.eReporting.deleteTransaction(tx.id); // resolves void on 204
 
 Bulk-import from a semicolon-separated CSV (one row per invoice line; rows sharing an
 `invoice_number` are grouped into one transaction). Idempotent: re-uploading skips rows whose
-invoice already exists.
+invoice already exists. An optional `internal_reference` column sets your own reference per
+invoice.
 
 ```ts
 import { readFileSync } from 'fs';

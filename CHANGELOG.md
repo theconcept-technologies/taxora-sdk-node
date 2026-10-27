@@ -6,6 +6,12 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ### Added
 
+- **Internal reference:** `internalReference` on `createTransaction()` and `updateTransaction()` (max 100 chars;
+  an empty string clears it on update) and `ComplianceTransaction.internalReference`. Your own reference (order
+  number, ERP id) for searching — never sent to the buyer or the tax authority. Also an optional CSV import column
+  `internal_reference`.
+- **`listTransactions()` filters `search`** (contains-match over invoice number, internal reference and buyer name)
+  **and `internalReference`** (exact match), both max 100 chars.
 - **`eReporting.getTransactionDocument(id)`** downloads the legal e-invoice of a sent transaction
   (`{ content: Uint8Array, contentType, filename }`); 409 while it is not available yet.
 - **Invoice PDF attachment:** `invoicePdf` / `invoicePdfFilename` on `createTransaction()` and `updateTransaction()`

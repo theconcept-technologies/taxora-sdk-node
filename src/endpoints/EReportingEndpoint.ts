@@ -270,6 +270,11 @@ export interface CreateComplianceTransactionInput extends ComplianceTransactionB
   remittanceInformation?: string;
   paymentMethodText?: string;
   paymentTerms?: string;
+  /**
+   * Your own reference (order number, ERP id), max 100 chars. Stored for your search
+   * only — never sent to the buyer or the tax authority.
+   */
+  internalReference?: string;
   /** When false, the transaction is only recorded — submission is deferred. Defaults to true server-side. */
   submitNow?: boolean;
 }
@@ -295,6 +300,11 @@ export interface UpdateComplianceTransactionInput extends ComplianceTransactionB
   remittanceInformation?: string;
   paymentMethodText?: string;
   paymentTerms?: string;
+  /**
+   * Your own reference (order number, ERP id), max 100 chars. Stored for your search
+   * only — never sent to the buyer or the tax authority. An empty string clears it.
+   */
+  internalReference?: string;
 }
 
 export interface ComplianceTransactionFilters {
@@ -308,6 +318,10 @@ export interface ComplianceTransactionFilters {
   complianceEnrollmentId?: number;
   /** Only transactions of this country (2-char ISO 3166-1 alpha-2). */
   country?: string;
+  /** Contains-match over invoice number, internal reference and buyer name (max 100 chars). */
+  search?: string;
+  /** Exact match on the internal reference (max 100 chars). */
+  internalReference?: string;
   page?: number;
   /** Page size (1-100, default 25 server-side). */
   perPage?: number;
@@ -556,6 +570,7 @@ export class EReportingEndpoint {
     this.validateInvoiceLines(input.invoiceLines);
     this.validateOptionalCodes(input);
     this.validateBuyerFields(input);
+    this.validateInternalReference(input.internalReference);
     this.validateInvoicePdfFilename(input.invoicePdfFilename);
 
     const body: Record<string, unknown> = {
@@ -576,7 +591,7 @@ export class EReportingEndpoint {
     return ComplianceTransaction.fromArray(data);
   }
 
-  /** Paginated list of the company's transactions (newest invoice date first), filterable by date / state / type / enrollment / country. */
+  /** Paginated list of the company's transactions (newest invoice date first), filterable by date / state / type / enrollment / country / search / internal reference. */
   async listTransactions(filters: ComplianceTransactionFilters = {}): Promise<ComplianceTransactionPage> {
     if (filters.complianceEnrollmentId !== undefined) {
       this.validateId(filters.complianceEnrollmentId, 'complianceEnrollmentId');
@@ -584,6 +599,10 @@ export class EReportingEndpoint {
     if (filters.country !== undefined && !COUNTRY_REGEX.test(filters.country)) {
       throw new TaxoraException('country must be a 2-character ISO 3166-1 alpha-2 code.');
     }
+    if (filters.search !== undefined && filters.search.length > 100) {
+      throw new TaxoraException('search must not exceed 100 characters.');
+    }
+    this.validateInternalReference(filters.internalReference);
 
     const params = new URLSearchParams();
     if (filters.dateFrom !== undefined) params.set('date_from', this.formatDate(filters.dateFrom));
@@ -594,6 +613,8 @@ export class EReportingEndpoint {
       params.set('compliance_enrollment_id', String(filters.complianceEnrollmentId));
     }
     if (filters.country !== undefined) params.set('country', filters.country.toUpperCase());
+    if (filters.search !== undefined) params.set('search', filters.search);
+    if (filters.internalReference !== undefined) params.set('internal_reference', filters.internalReference);
     if (filters.page !== undefined) params.set('page', String(filters.page));
     if (filters.perPage !== undefined) params.set('per_page', String(filters.perPage));
 
@@ -621,6 +642,7 @@ export class EReportingEndpoint {
     if (input.invoiceLines !== undefined) this.validateInvoiceLines(input.invoiceLines);
     this.validateOptionalCodes(input);
     this.validateBuyerFields(input);
+    this.validateInternalReference(input.internalReference);
     this.validateInvoicePdfFilename(input.invoicePdfFilename);
 
     const body: Record<string, unknown> = {};
@@ -1091,6 +1113,12 @@ export class EReportingEndpoint {
     }
   }
 
+  private validateInternalReference(internalReference: string | undefined): void {
+    if (internalReference !== undefined && internalReference.length > 100) {
+      throw new TaxoraException('internalReference must not exceed 100 characters.');
+    }
+  }
+
   private validateOptionalCodes(input: { currency?: string; counterpartyCountry?: string }): void {
     if (input.currency !== undefined && input.currency.length !== 3) {
       throw new TaxoraException('currency must be a 3-character ISO 4217 code.');
@@ -1182,6 +1210,7 @@ export class EReportingEndpoint {
     if (input.amendedNumber !== undefined) body['amended_number'] = input.amendedNumber;
     if (input.amendedDate !== undefined) body['amended_date'] = this.formatDate(input.amendedDate);
     if (input.extraInfo !== undefined) body['extra_info'] = input.extraInfo;
+    if (input.internalReference !== undefined) body['internal_reference'] = input.internalReference;
     if (input.invoicePdf !== undefined) body['invoice_pdf'] = this.encodeInvoicePdf(input.invoicePdf);
     if (input.invoicePdfFilename !== undefined) body['invoice_pdf_filename'] = input.invoicePdfFilename;
   }

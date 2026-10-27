@@ -1756,6 +1756,66 @@ describe('EReportingEndpoint Norway transactions', () => {
   });
 });
 
+describe('EReportingEndpoint internal reference', () => {
+  it('sends internal_reference on create and parses it from the response', async () => {
+    const { endpoint, client } = makeEndpoint([
+      envelope({ ...TRANSACTION_PAYLOAD, internal_reference: 'ERP-4711' }, 201),
+    ]);
+
+    const tx = await endpoint.createTransaction({ ...validTransactionInput(), internalReference: 'ERP-4711' });
+
+    expect(JSON.parse(client.requests[0]!.options?.body as string).internal_reference).toBe('ERP-4711');
+    expect(tx.internalReference).toBe('ERP-4711');
+  });
+
+  it('omits internal_reference when unset and parses a missing field as null', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(TRANSACTION_PAYLOAD, 201)]);
+
+    const tx = await endpoint.createTransaction(validTransactionInput());
+
+    expect(JSON.parse(client.requests[0]!.options?.body as string)).not.toHaveProperty('internal_reference');
+    expect(tx.internalReference).toBeNull();
+  });
+
+  it('PUTs internal_reference on update (empty string clears it)', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(TRANSACTION_PAYLOAD), envelope(TRANSACTION_PAYLOAD)]);
+
+    await endpoint.updateTransaction(42, { internalReference: 'ERP-1' });
+    await endpoint.updateTransaction(42, { internalReference: '' });
+
+    expect(JSON.parse(client.requests[0]!.options?.body as string)).toEqual({ internal_reference: 'ERP-1' });
+    expect(JSON.parse(client.requests[1]!.options?.body as string)).toEqual({ internal_reference: '' });
+  });
+
+  it('listTransactions serializes search and internal reference', async () => {
+    const { endpoint, client } = makeEndpoint([pageEnvelope([TRANSACTION_PAYLOAD], {})]);
+
+    await endpoint.listTransactions({ search: 'ACME 2026', internalReference: 'ERP-4711' });
+
+    expect(client.requests[0]!.url).toBe(
+      `${BASE_URL}/compliance/transactions?search=ACME+2026&internal_reference=ERP-4711`,
+    );
+  });
+
+  it('rejects an internal reference or search over 100 characters without a request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(
+      endpoint.createTransaction({ ...validTransactionInput(), internalReference: 'x'.repeat(101) }),
+    ).rejects.toThrow('internalReference must not exceed 100 characters.');
+    await expect(endpoint.updateTransaction(42, { internalReference: 'x'.repeat(101) })).rejects.toThrow(
+      'internalReference must not exceed 100 characters.',
+    );
+    await expect(endpoint.listTransactions({ internalReference: 'x'.repeat(101) })).rejects.toThrow(
+      'internalReference must not exceed 100 characters.',
+    );
+    await expect(endpoint.listTransactions({ search: 'x'.repeat(101) })).rejects.toThrow(
+      'search must not exceed 100 characters.',
+    );
+    expect(client.requests).toHaveLength(0);
+  });
+});
+
 describe('EReportingEndpoint.requestEReportingAccess (per-country services)', () => {
   it('sends service and upper-cased countries', async () => {
     const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true })]);

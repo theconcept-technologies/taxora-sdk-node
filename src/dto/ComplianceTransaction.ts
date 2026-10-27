@@ -173,6 +173,11 @@ export class ComplianceTransaction {
     public readonly deliveryCheck: ComplianceTransactionDeliveryCheck | null = null,
     /** E-invoicing: the attached seller PDF, or null when none is attached. */
     public readonly invoicePdf: ComplianceTransactionInvoicePdf | null = null,
+    /**
+     * The customer's own reference (order number, ERP id) for searching; never
+     * sent to the buyer or the tax authority. Null when not set.
+     */
+    public readonly internalReference: string | null = null,
   ) {}
 
   get isCreditNote(): boolean {
@@ -229,6 +234,7 @@ export class ComplianceTransaction {
       asNullableString(data['document_url']),
       asRecord(data['delivery_check']),
       toInvoicePdf(data['invoice_pdf']),
+      asNullableString(data['internal_reference']),
     );
   }
 }
