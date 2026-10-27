@@ -1,6 +1,6 @@
 {
   "name": "@taxora/sdk",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Taxora VAT Validation API SDK for Node.js",
   "license": "MIT",
   "type": "module",
