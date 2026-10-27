@@ -322,6 +322,8 @@ export interface ComplianceTransactionFilters {
   search?: string;
   /** Exact match on the internal reference (max 100 chars). */
   internalReference?: string;
+  /** Provider delivery state (lowercase letters/underscore, max 30), e.g. `refused` = rejected by the buyer. */
+  providerState?: string;
   page?: number;
   /** Page size (1-100, default 25 server-side). */
   perPage?: number;
@@ -591,7 +593,7 @@ export class EReportingEndpoint {
     return ComplianceTransaction.fromArray(data);
   }
 
-  /** Paginated list of the company's transactions (newest invoice date first), filterable by date / state / type / enrollment / country / search / internal reference. */
+  /** Paginated list of the company's transactions (newest invoice date first), filterable by date / state / type / enrollment / country / search / internal reference / provider state. */
   async listTransactions(filters: ComplianceTransactionFilters = {}): Promise<ComplianceTransactionPage> {
     if (filters.complianceEnrollmentId !== undefined) {
       this.validateId(filters.complianceEnrollmentId, 'complianceEnrollmentId');
@@ -603,6 +605,9 @@ export class EReportingEndpoint {
       throw new TaxoraException('search must not exceed 100 characters.');
     }
     this.validateInternalReference(filters.internalReference);
+    if (filters.providerState !== undefined && !/^[a-z_]{1,30}$/.test(filters.providerState)) {
+      throw new TaxoraException('providerState must be 1-30 lowercase letters or underscores (e.g. "refused").');
+    }
 
     const params = new URLSearchParams();
     if (filters.dateFrom !== undefined) params.set('date_from', this.formatDate(filters.dateFrom));
@@ -615,6 +620,7 @@ export class EReportingEndpoint {
     if (filters.country !== undefined) params.set('country', filters.country.toUpperCase());
     if (filters.search !== undefined) params.set('search', filters.search);
     if (filters.internalReference !== undefined) params.set('internal_reference', filters.internalReference);
+    if (filters.providerState !== undefined) params.set('provider_state', filters.providerState);
     if (filters.page !== undefined) params.set('page', String(filters.page));
     if (filters.perPage !== undefined) params.set('per_page', String(filters.perPage));
 

@@ -184,6 +184,10 @@ export class ComplianceTransaction {
      * Download it with `eReporting.getTransactionPdf(id)`.
      */
     public readonly pdfUrl: string | null = null,
+    /** E-invoicing: the buyer refused the invoice (provider state `refused`) — correct it with a credit note. */
+    public readonly buyerRejected: boolean = false,
+    /** E-invoicing: the buyer's reason for the rejection, when given. */
+    public readonly rejectionReason: string | null = null,
   ) {}
 
   get isCreditNote(): boolean {
@@ -242,6 +246,8 @@ export class ComplianceTransaction {
       toInvoicePdf(data['invoice_pdf']),
       asNullableString(data['internal_reference']),
       asNullableString(data['pdf_url']),
+      data['buyer_rejected'] === true,
+      asNullableString(data['rejection_reason']),
     );
   }
 }

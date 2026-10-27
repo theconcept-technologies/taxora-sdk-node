@@ -1816,6 +1816,45 @@ describe('EReportingEndpoint internal reference', () => {
   });
 });
 
+describe('EReportingEndpoint buyer rejection', () => {
+  it('listTransactions serializes providerState and parses buyerRejected / rejectionReason', async () => {
+    const { endpoint, client } = makeEndpoint([
+      pageEnvelope(
+        [
+          {
+            ...NORWAY_TRANSACTION_PAYLOAD,
+            provider_state: 'refused',
+            buyer_rejected: true,
+            rejection_reason: 'Wrong order number',
+          },
+        ],
+        {},
+      ),
+    ]);
+
+    const page = await endpoint.listTransactions({ providerState: 'refused' });
+
+    expect(client.requests[0]!.url).toBe(`${BASE_URL}/compliance/transactions?provider_state=refused`);
+    expect(page.rows[0]!.buyerRejected).toBe(true);
+    expect(page.rows[0]!.rejectionReason).toBe('Wrong order number');
+  });
+
+  it('defaults buyerRejected to false and rejectionReason to null when absent', () => {
+    const tx = ComplianceTransaction.fromArray(TRANSACTION_PAYLOAD);
+    expect(tx.buyerRejected).toBe(false);
+    expect(tx.rejectionReason).toBeNull();
+  });
+
+  it('rejects a malformed providerState without a request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    for (const providerState of ['Refused', 'not-ok', '', 'a'.repeat(31)]) {
+      await expect(endpoint.listTransactions({ providerState })).rejects.toThrow('providerState must be');
+    }
+    expect(client.requests).toHaveLength(0);
+  });
+});
+
 describe('EReportingEndpoint.requestEReportingAccess (per-country services)', () => {
   it('sends service and upper-cased countries', async () => {
     const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true })]);

@@ -46,12 +46,42 @@ export interface ComplianceLedgerWebhookObject {
   ledger_date: string | null;
 }
 
+/**
+ * `compliance.transaction.state_changed` payload. Sent for every real change of a
+ * transaction — Taxora's own state (submitted, error, not_required) and the
+ * provider's delivery state (accepted, refused, paid, …); never twice for the
+ * same state and never for the transient `sending`.
+ *
+ * The optional fields were added later and are missing on older deliveries.
+ */
 export interface ComplianceTransactionWebhookObject {
   id: number;
+  /** A ComplianceTransactionState value, e.g. `submitted`, `error`, `not_required`. */
   state: string;
+  /** Provider-side delivery state, e.g. `sent`, `accepted`, `refused`, `paid`. */
   provider_state: string | null;
+  /** Lowercase ISO 3166-1 alpha-2 code, e.g. `no`. */
   country: string | null;
   invoice_number: string | null;
+  /** Your own reference of the transaction. */
+  internal_reference?: string | null;
+  /** Taxora state before this change. */
+  previous_state?: string | null;
+  /** Provider state before this change. */
+  previous_provider_state?: string | null;
+  /** The buyer refused the e-invoice — issue a credit note. */
+  buyer_rejected?: boolean;
+  /** The buyer's reason for the rejection, when given. */
+  rejection_reason?: string | null;
+  /** Why sending failed (state `error`). */
+  submission_error?: string | null;
+  /** Peppol directory result, e.g. `not_reachable` when the state is `not_required`. */
+  delivery_check?: string | null;
+}
+
+/** True when the buyer refused the e-invoice (false for older deliveries without the field). */
+export function isBuyerRejected(object: ComplianceTransactionWebhookObject): boolean {
+  return object.buyer_rejected === true;
 }
 
 /** Raw Smart Enrichment rows — wrap them with `SmartEnrichmentResource.fromArray()` for a typed DTO. */

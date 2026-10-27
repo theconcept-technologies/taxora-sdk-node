@@ -6,6 +6,13 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ### Added
 
+- **E-invoicing status signals:** `compliance.transaction.state_changed` now fires for every real change (Taxora's
+  own state and the provider's delivery state: accepted, refused, paid, …; never twice, never for `sending`).
+  `ComplianceTransactionWebhookObject` gained the optional `internal_reference`, `previous_state`,
+  `previous_provider_state`, `buyer_rejected`, `rejection_reason`, `submission_error` and `delivery_check`, plus the
+  helper **`isBuyerRejected(object)`**.
+- **`ComplianceTransaction.buyerRejected` / `.rejectionReason`** and the **`providerState`** filter on
+  `listTransactions()` (e.g. `'refused'` = rejected by the buyer).
 - **`eReporting.getTransactionPdf(id)`** downloads the invoice as a readable PDF (the attached seller PDF or the
   provider's rendering of the e-invoice) as `{ content, contentType, filename }`; 409 while no PDF is available.
   **`ComplianceTransaction.pdfUrl`** is set once a PDF is available.

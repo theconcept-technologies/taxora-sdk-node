@@ -649,6 +649,7 @@ const transactions = await client.eReporting.listTransactions({
   country: 'FR', // optional: one country only
   search: 'ACME', // optional: contains-match over invoice number, internal reference and buyer name
   internalReference: 'ORDER-4711', // optional: exact match on your internal reference
+  providerState: 'refused', // optional: provider delivery state, 'refused' = rejected by the buyer
   page: 1,
   perPage: 25,
 });
@@ -1144,21 +1145,40 @@ Next.js App Router: `const rawBody = await request.text();` (not `request.json()
 
 ### Events
 
-| Event                                  | `data.object`                                                                                       |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `vat.validated` / `vat.state_changed`  | `VatWebhookObject` (`id`, `vat_uid`, `state`, `company_name`, …)                                    |
-| `compliance.transaction.state_changed` | `ComplianceTransactionWebhookObject` (`id`, `state`, `provider_state`, `country`, `invoice_number`) |
-| `compliance.ledger.state_changed`      | `ComplianceLedgerWebhookObject` (`id`, `state`, `ledger_type`, `ledger_date`)                       |
-| `enrichment.completed`                 | `EnrichmentCompletedWebhookObject` (`jobId`, `status`, `results`, …)                                |
-| `enrichment.updated`                   | `EnrichmentUpdatedWebhookObject` (`jobId`, `rowIndex`, `result`, …)                                 |
-| `webhook.test`                         | `TestWebhookObject` (`message`)                                                                     |
+| Event                                  | `data.object`                                                                                                 |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `vat.validated` / `vat.state_changed`  | `VatWebhookObject` (`id`, `vat_uid`, `state`, `company_name`, …)                                              |
+| `compliance.transaction.state_changed` | `ComplianceTransactionWebhookObject` (`id`, `state`, `previous_state`, `provider_state`, `buyer_rejected`, …) |
+| `compliance.ledger.state_changed`      | `ComplianceLedgerWebhookObject` (`id`, `state`, `ledger_type`, `ledger_date`)                                 |
+| `enrichment.completed`                 | `EnrichmentCompletedWebhookObject` (`jobId`, `status`, `results`, …)                                          |
+| `enrichment.updated`                   | `EnrichmentUpdatedWebhookObject` (`jobId`, `rowIndex`, `result`, …)                                           |
+| `webhook.test`                         | `TestWebhookObject` (`message`)                                                                               |
+
+`compliance.transaction.state_changed` fires for **every real change** of a transaction: Taxora's own state
+(`submitted`, `error`, `not_required`) and the provider's delivery state (`accepted`, `refused`, `paid`, …). It is
+never sent twice for the same state and never for the transient `sending`. Besides `id`, `invoice_number`,
+`country` (lowercase), `state` and `provider_state` the object carries `internal_reference`, `previous_state`,
+`previous_provider_state`, `buyer_rejected`, `rejection_reason`, `submission_error` and `delivery_check` — these are
+optional in the type because older deliveries lack them.
 
 ```ts
+import { isBuyerRejected } from '@taxora/sdk';
+
 if (event.event === 'compliance.transaction.state_changed') {
-  const { id, state, provider_state } = event.data.object; // e.g. 'submitted' / 'accepted'
-  if (state === 'submitted') await client.eReporting.getTransaction(id);
+  const tx = event.data.object;
+  if (tx.state === 'not_required') {
+    // The buyer cannot receive e-invoices (tx.delivery_check e.g. 'not_reachable'):
+    // nothing was sent or billed — send your PDF to the buyer by e-mail yourself.
+  }
+  if (isBuyerRejected(tx)) {
+    // The buyer refused the e-invoice (tx.rejection_reason) — issue a credit note.
+  }
+  if (tx.state === 'error') console.warn(tx.submission_error);
 }
 ```
+
+Transactions carry the same signal (`tx.buyerRejected`, `tx.rejectionReason`); find rejected invoices with
+`listTransactions({ providerState: 'refused' })`.
 
 ---
 
