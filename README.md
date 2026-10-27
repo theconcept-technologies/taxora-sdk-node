@@ -1020,9 +1020,11 @@ error body when there is one, and falls back to the status line
 untouched body stays available via `err.getResponseBody()`.
 
 **Compliance 403 codes.** Compliance 403s are `HttpException`s; the reason is the `code` in the JSON body
-(`err.getResponseBody()`): `service_not_active` (the company has not booked the service/country) or
+(`err.getResponseBody()`): `service_not_active` (the company has not booked the service/country),
 `read_only_role` (a write request — create, update, delete, submit, import — by a user whose only role is
-read-only).
+read-only) or `admin_only` (body `{ message, code: 'admin_only' }`: a developer-role user tried to create an
+enrollment, `createCheckout()`, `confirmCheckout()` or `createBillingPortalSession()` — only admins can add
+countries or change plans).
 
 ### Automatic retries
 
@@ -1153,7 +1155,7 @@ Next.js App Router: `const rawBody = await request.text();` (not `request.json()
 
 ```ts
 if (event.event === 'compliance.transaction.state_changed') {
-  const { id, state, provider_state } = event.data.object; // e.g. 'submitted' / 'accepted', or 'not_required'
+  const { id, state, provider_state } = event.data.object; // e.g. 'submitted' / 'accepted'
   if (state === 'submitted') await client.eReporting.getTransaction(id);
 }
 ```

@@ -571,7 +571,7 @@ export class EReportingEndpoint {
     this.validateOptionalCodes(input);
     this.validateBuyerFields(input);
     this.validateInternalReference(input.internalReference);
-    this.validateInvoicePdfFilename(input.invoicePdfFilename);
+    this.validateInvoicePdfFilename(input);
 
     const body: Record<string, unknown> = {
       compliance_enrollment_id: input.complianceEnrollmentId,
@@ -643,7 +643,7 @@ export class EReportingEndpoint {
     this.validateOptionalCodes(input);
     this.validateBuyerFields(input);
     this.validateInternalReference(input.internalReference);
-    this.validateInvoicePdfFilename(input.invoicePdfFilename);
+    this.validateInvoicePdfFilename(input);
 
     const body: Record<string, unknown> = {};
     if (input.transactionType !== undefined) body['transaction_type'] = input.transactionType;
@@ -1130,9 +1130,13 @@ export class EReportingEndpoint {
     });
   }
 
-  private validateInvoicePdfFilename(filename: string | undefined): void {
-    if (filename !== undefined && filename.length > 120) {
+  private validateInvoicePdfFilename(input: ComplianceInvoicePdfFields): void {
+    if (input.invoicePdfFilename === undefined) return;
+    if (input.invoicePdfFilename.length > 120) {
       throw new TaxoraException('invoicePdfFilename must not exceed 120 characters.');
+    }
+    if (input.invoicePdf === undefined) {
+      throw new TaxoraException('invoicePdfFilename requires invoicePdf.');
     }
   }
 

@@ -34,6 +34,16 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 - README: compliance webhook events (`compliance.transaction.state_changed`, `compliance.ledger.state_changed`) listed
   with their payloads.
 
+### Fixed
+
+- **`ComplianceOfferingPlan.requires`** is now typed `{ country: string; service: string } | null` and parsed from the
+  object the API sends (e.g. `{ country: 'FR', service: 'e_reporting' }`). It was typed `unknown[] | null` and always
+  came back `null`. Public type change.
+- `createTransaction()` / `updateTransaction()` reject `invoicePdfFilename` without `invoicePdf`
+  (`invoicePdfFilename requires invoicePdf.`), like the PHP SDK.
+- README: `admin_only` (403) listed with the compliance error codes; the webhook example no longer mentions a
+  `not_required` state event (it is never sent).
+
 ## [1.8.0] — 2026-10-25
 
 ### Added

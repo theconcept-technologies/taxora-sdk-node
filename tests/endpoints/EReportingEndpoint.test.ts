@@ -1907,6 +1907,12 @@ describe('EReportingEndpoint e-invoicing transaction fields', () => {
     await expect(endpoint.updateTransaction(99, { invoicePdfFilename: 'x'.repeat(121) })).rejects.toThrow(
       'invoicePdfFilename must not exceed 120 characters.',
     );
+    await expect(endpoint.updateTransaction(99, { invoicePdfFilename: 'RE-2027-0001.pdf' })).rejects.toThrow(
+      'invoicePdfFilename requires invoicePdf.',
+    );
+    await expect(
+      endpoint.createTransaction({ ...validTransactionInput(), invoicePdfFilename: 'RE-2027-0001.pdf' }),
+    ).rejects.toThrow('invoicePdfFilename requires invoicePdf.');
     expect(client.requests).toHaveLength(0);
   });
 });
@@ -2093,7 +2099,7 @@ describe('EReportingEndpoint self-service plans', () => {
             volume_limit: null,
             contact_only: false,
             checkout_available: true,
-            requires: ['FR:e_reporting'],
+            requires: { country: 'FR', service: 'e_reporting' },
             eligible: true,
           },
         ],
@@ -2113,6 +2119,13 @@ describe('EReportingEndpoint self-service plans', () => {
     access_by_country: { FR: { e_reporting: true }, NO: { e_invoicing: false } },
   };
 
+  it('parses a missing requires as null', () => {
+    const offerings = ComplianceOfferings.fromArray({
+      data: [{ country: 'FR', service: 'e_reporting', plans: [{ key: 'basic', requires: null }] }],
+    });
+    expect(offerings.offerings[0]!.plans[0]!.requires).toBeNull();
+  });
+
   it('getOfferings() maps plans, coverage and access', async () => {
     const { endpoint, client } = makeEndpoint([envelope(OFFERINGS_PAYLOAD)]);
 
@@ -2130,7 +2143,7 @@ describe('EReportingEndpoint self-service plans', () => {
       volumeLimit: null,
       contactOnly: false,
       checkoutAvailable: true,
-      requires: ['FR:e_reporting'],
+      requires: { country: 'FR', service: 'e_reporting' },
       eligible: true,
     });
     expect(offerings.coverage[0]).toEqual({

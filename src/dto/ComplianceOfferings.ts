@@ -26,6 +26,11 @@ function asStringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
+function toRequires(value: unknown): { country: string; service: string } | null {
+  const record = asRecord(value);
+  return record === null ? null : { country: asString(record['country']), service: asString(record['service']) };
+}
+
 /** One bookable plan of a country offering. Fees are net EUR amounts. */
 export interface ComplianceOfferingPlan {
   key: string;
@@ -38,8 +43,8 @@ export interface ComplianceOfferingPlan {
   contactOnly: boolean;
   /** True when createCheckout() can be started for this plan right now. */
   checkoutAvailable: boolean;
-  /** Prerequisites of the plan (e.g. a France e-reporting plan); null when there are none. */
-  requires: unknown[] | null;
+  /** Prerequisite of the plan (e.g. `{ country: 'FR', service: 'e_reporting' }`); null when there is none. */
+  requires: { country: string; service: string } | null;
   /** Whether the company meets `requires`. */
   eligible: boolean;
 }
@@ -103,7 +108,7 @@ export class ComplianceOfferings {
         volumeLimit: plan['volume_limit'] ?? null,
         contactOnly: plan['contact_only'] === true,
         checkoutAvailable: plan['checkout_available'] === true,
-        requires: Array.isArray(plan['requires']) ? (plan['requires'] as unknown[]) : null,
+        requires: toRequires(plan['requires']),
         eligible: plan['eligible'] === true,
       })),
     }));
