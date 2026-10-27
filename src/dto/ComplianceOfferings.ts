@@ -74,6 +74,11 @@ export interface ComplianceCoverageCountry {
   network: string | null;
   format: string | null;
   mandate: string | null;
+  /**
+   * "yes", "cross_border_only" (only invoices across the border are reached) or
+   * "coming_soon" (not live yet, can be requested). Older API versions send none: "yes".
+   */
+  support: string;
 }
 
 /**
@@ -120,6 +125,7 @@ export class ComplianceOfferings {
       network: asNullableString(row['network']),
       format: asNullableString(row['format']),
       mandate: asNullableString(row['mandate']),
+      support: asString(row['support'], 'yes'),
     }));
 
     const access = asRecord(data['access']) ?? {};

@@ -2245,6 +2245,15 @@ describe('EReportingEndpoint self-service plans', () => {
         format: 'ehf',
         mandate: null,
       },
+      {
+        country: 'HR',
+        availability: 'on_request',
+        services: ['e_invoicing'],
+        network: 'fiscalization',
+        format: null,
+        mandate: '2026-01-01',
+        support: 'coming_soon',
+      },
     ],
     access: { e_reporting: true, e_invoicing: false },
     access_by_country: { FR: { e_reporting: true }, NO: { e_invoicing: false } },
@@ -2284,7 +2293,9 @@ describe('EReportingEndpoint self-service plans', () => {
       network: 'peppol',
       format: 'ehf',
       mandate: null,
+      support: 'yes',
     });
+    expect(offerings.coverage[1]!.support).toBe('coming_soon');
     expect(offerings.access).toEqual({ eReporting: true, eInvoicing: false });
     expect(offerings.accessByCountry).toEqual({ FR: { e_reporting: true }, NO: { e_invoicing: false } });
   });

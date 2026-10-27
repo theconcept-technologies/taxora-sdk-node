@@ -6,6 +6,9 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ### Added
 
+- **`ComplianceCoverageCountry.support`** — `'yes' | 'cross_border_only' | 'coming_soon'` from
+  `GET /compliance/offerings`: whether a country is fully served, reached only for invoices across the border, or not
+  live yet (can still be requested). Defaults to `'yes'` for older API versions.
 - **`eReporting.getNotificationSettings()` / `eReporting.updateNotificationSettings(input)`** —
   `GET` / `PUT /compliance/notification-settings`: the company's opt-in compliance emails as
   `ComplianceNotificationSettings` (`{ recipients, language, notOnPeppol, digest, digestSentAt }`). `notOnPeppol` =
