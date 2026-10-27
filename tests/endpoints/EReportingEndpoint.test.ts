@@ -1967,6 +1967,65 @@ describe('EReportingEndpoint.getTransactionDocument', () => {
   });
 });
 
+describe('EReportingEndpoint.getTransactionPdf', () => {
+  it('GETs the PDF and returns bytes, content type and filename', async () => {
+    const pdf = new TextEncoder().encode('%PDF-1.7\nfake invoice');
+    const { endpoint, client } = makeEndpoint([
+      new Response(pdf, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': 'inline; filename="RE-2026-0201.pdf"',
+        },
+      }),
+    ]);
+
+    const doc = await endpoint.getTransactionPdf(99);
+
+    const req = client.requests[0]!;
+    expect(req.method).toBe('GET');
+    expect(req.url).toBe(`${BASE_URL}/compliance/transactions/99/pdf`);
+    expect(new TextDecoder().decode(doc.content)).toBe('%PDF-1.7\nfake invoice');
+    expect(doc.contentType).toBe('application/pdf');
+    expect(doc.filename).toBe('RE-2026-0201.pdf');
+  });
+
+  it('throws HttpException 409 when no PDF is available yet', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({ success: false, error: 'No PDF is available for this transaction yet.' }, 409),
+    ]);
+
+    const error = await endpoint.getTransactionPdf(99).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).statusCode).toBe(409);
+  });
+
+  it('throws HttpException 404 for an unknown transaction', async () => {
+    const { endpoint } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: false, error: 'Not found.' }, 404)]);
+
+    const error = await endpoint.getTransactionPdf(99).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).statusCode).toBe(404);
+  });
+
+  it('rejects an invalid id without a request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(endpoint.getTransactionPdf(0)).rejects.toThrow('id must be a positive integer.');
+    expect(client.requests).toHaveLength(0);
+  });
+
+  it('maps pdfUrl from the response, null when absent', () => {
+    const tx = ComplianceTransaction.fromArray({
+      ...TRANSACTION_PAYLOAD,
+      pdf_url: 'https://api.taxora.io/v1/compliance/transactions/99/pdf',
+    });
+    expect(tx.pdfUrl).toBe('https://api.taxora.io/v1/compliance/transactions/99/pdf');
+    expect(ComplianceTransaction.fromArray(TRANSACTION_PAYLOAD).pdfUrl).toBeNull();
+    expect(ComplianceTransaction.fromArray({ ...TRANSACTION_PAYLOAD, pdf_url: null }).pdfUrl).toBeNull();
+  });
+});
+
 describe('EReportingEndpoint.exportRevenueTaxRatesCsv', () => {
   const CSV = 'month;currency;tax_rate;net;vat;gross;lines\r\n2026-07;EUR;20.00;100.00;20.00;120.00;1\r\n';
 

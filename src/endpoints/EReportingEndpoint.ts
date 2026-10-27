@@ -80,7 +80,7 @@ export interface RevenueStatisticsFilters {
 /** Filters for exportRevenueTaxRatesCsv() — the revenue statistics filters without `interval`. */
 export type RevenueTaxRatesCsvFilters = Omit<RevenueStatisticsFilters, 'interval'>;
 
-/** The legal e-invoice document of a sent transaction (getTransactionDocument()). */
+/** A transaction download: the legal e-invoice document (getTransactionDocument()) or the invoice PDF (getTransactionPdf()). */
 export interface ComplianceTransactionDocument {
   /** Raw bytes as delivered by the network (e.g. the EHF/UBL XML). */
   content: Uint8Array;
@@ -698,6 +698,29 @@ export class EReportingEndpoint {
     this.validateId(id, 'id');
 
     const response = await this.sendDownloadRequest(`${this.baseUrl}/compliance/transactions/${id}/document`, '*/*');
+    if (!response.ok) {
+      await this.parseJsonResponse(response); // throws with the shared error mapping
+    }
+
+    return {
+      content: new Uint8Array(await response.arrayBuffer()),
+      contentType: response.headers.get('content-type') ?? 'application/octet-stream',
+      filename: this.filenameFromDisposition(response.headers.get('content-disposition')),
+    };
+  }
+
+  /**
+   * Download the invoice as a readable PDF — the seller's attached PDF, or the
+   * provider's rendering of the e-invoice. Available once `pdfUrl` on the
+   * transaction is set.
+   *
+   * Errors: 404 (HttpException) for an unknown transaction; 409 (HttpException)
+   * when no PDF exists (yet); 502 on provider failure.
+   */
+  async getTransactionPdf(id: number): Promise<ComplianceTransactionDocument> {
+    this.validateId(id, 'id');
+
+    const response = await this.sendDownloadRequest(`${this.baseUrl}/compliance/transactions/${id}/pdf`, '*/*');
     if (!response.ok) {
       await this.parseJsonResponse(response); // throws with the shared error mapping
     }

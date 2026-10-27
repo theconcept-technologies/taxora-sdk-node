@@ -6,6 +6,9 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ### Added
 
+- **`eReporting.getTransactionPdf(id)`** downloads the invoice as a readable PDF (the attached seller PDF or the
+  provider's rendering of the e-invoice) as `{ content, contentType, filename }`; 409 while no PDF is available.
+  **`ComplianceTransaction.pdfUrl`** is set once a PDF is available.
 - **Internal reference:** `internalReference` on `createTransaction()` and `updateTransaction()` (max 100 chars;
   an empty string clears it on update) and `ComplianceTransaction.internalReference`. Your own reference (order
   number, ERP id) for searching — never sent to the buyer or the tax authority. Also an optional CSV import column

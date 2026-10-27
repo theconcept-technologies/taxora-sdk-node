@@ -896,6 +896,12 @@ if (tx.documentUrl !== null) {
   const doc = await client.eReporting.getTransactionDocument(tx.id); // 409 while not available yet
   writeFileSync(doc.filename ?? `${tx.invoiceNumber}.xml`, doc.content); // doc.contentType e.g. application/xml
 }
+
+// The invoice as a readable PDF (your attached PDF, or the provider's rendering of the e-invoice)
+if (tx.pdfUrl !== null) {
+  const pdf = await client.eReporting.getTransactionPdf(tx.id); // 409 while no PDF is available
+  writeFileSync(pdf.filename ?? `${tx.invoiceNumber}.pdf`, pdf.content); // pdf.contentType: application/pdf
+}
 ```
 
 ### Self-service plans (Stripe)

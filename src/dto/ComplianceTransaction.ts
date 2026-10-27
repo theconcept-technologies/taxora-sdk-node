@@ -178,6 +178,12 @@ export class ComplianceTransaction {
      * sent to the buyer or the tax authority. Null when not set.
      */
     public readonly internalReference: string | null = null,
+    /**
+     * URL of the invoice as a readable PDF (the attached seller PDF or the
+     * provider's rendering of the e-invoice); null when no PDF is available.
+     * Download it with `eReporting.getTransactionPdf(id)`.
+     */
+    public readonly pdfUrl: string | null = null,
   ) {}
 
   get isCreditNote(): boolean {
@@ -235,6 +241,7 @@ export class ComplianceTransaction {
       asRecord(data['delivery_check']),
       toInvoicePdf(data['invoice_pdf']),
       asNullableString(data['internal_reference']),
+      asNullableString(data['pdf_url']),
     );
   }
 }
