@@ -78,7 +78,7 @@ export interface ComplianceCoverageCountry {
    * "yes", "cross_border_only" (only invoices across the border are reached) or
    * "coming_soon" (not live yet, can be requested). Older API versions send none: "yes".
    */
-  support: string;
+  support?: string;
 }
 
 /**
