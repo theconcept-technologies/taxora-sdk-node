@@ -4,6 +4,8 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ## [Unreleased]
 
+## [1.9.0] — 2026-10-27
+
 ### Added
 
 - **`ComplianceCoverageCountry.support`** — `'yes' | 'cross_border_only' | 'coming_soon'` from
