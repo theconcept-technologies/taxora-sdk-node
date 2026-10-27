@@ -2117,6 +2117,98 @@ describe('EReportingEndpoint.exportRevenueTaxRatesCsv', () => {
   });
 });
 
+describe('EReportingEndpoint.exportTransactionsCsv', () => {
+  const CSV =
+    'invoice_number;internal_reference;invoice_date;currency;total;eur_rate;eur_total\r\nINV-1;ERP-1;2026-09-15;NOK;1150.00;11.6250;98.92\r\n';
+
+  it('GETs export.csv with the list filters (no pagination) and keeps the BOM', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.textResponse('﻿' + CSV, 200, 'text/csv; charset=UTF-8'),
+    ]);
+
+    const csv = await endpoint.exportTransactionsCsv({
+      dateFrom: '2026-01-01',
+      dateTo: '2026-09-30',
+      state: 'submitted',
+      transactionType: 'crossborder_outbound',
+      complianceEnrollmentId: 12,
+      country: 'no',
+      search: 'ACME',
+      internalReference: 'ERP-1',
+      providerState: 'refused',
+    });
+
+    expect(csv).toBe('﻿' + CSV);
+    const req = client.requests[0]!;
+    expect(req.method).toBe('GET');
+    expect(req.url).toBe(
+      `${BASE_URL}/compliance/transactions/export.csv?date_from=2026-01-01&date_to=2026-09-30&state=submitted&transaction_type=crossborder_outbound&compliance_enrollment_id=12&country=NO&search=ACME&internal_reference=ERP-1&provider_state=refused`,
+    );
+  });
+
+  it('sends no query string without filters', async () => {
+    const { endpoint, client } = makeEndpoint([SequenceHttpClient.textResponse(CSV, 200, 'text/csv')]);
+
+    expect(await endpoint.exportTransactionsCsv()).toBe(CSV);
+    expect(client.requests[0]!.url).toBe(`${BASE_URL}/compliance/transactions/export.csv`);
+  });
+
+  it('validates the filters without a request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(endpoint.exportTransactionsCsv({ providerState: 'Refused' })).rejects.toThrow('providerState must be');
+    await expect(endpoint.exportTransactionsCsv({ country: 'NOR' })).rejects.toThrow('country must be');
+    await expect(endpoint.exportTransactionsCsv({ search: 'x'.repeat(101) })).rejects.toThrow(
+      'search must not exceed 100 characters.',
+    );
+    await expect(endpoint.exportTransactionsCsv({ complianceEnrollmentId: 0 })).rejects.toThrow(
+      'complianceEnrollmentId must be a positive integer.',
+    );
+    expect(client.requests).toHaveLength(0);
+  });
+
+  it('maps a 422 to ValidationException', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({ message: 'The given data was invalid.', errors: { date_to: ['x'] } }, 422),
+    ]);
+
+    const error = await endpoint.exportTransactionsCsv({ dateTo: '2026-01-01' }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ValidationException);
+    expect((error as ValidationException).errors).toEqual({ date_to: ['x'] });
+  });
+});
+
+describe('ComplianceTransaction.eurEquivalent', () => {
+  it('parses the ECB EUR equivalent of a non-EUR invoice', () => {
+    const tx = ComplianceTransaction.fromArray({
+      ...TRANSACTION_PAYLOAD,
+      currency: 'NOK',
+      eur_equivalent: {
+        subtotal: '79.14',
+        tax_amount: '19.78',
+        total: '98.92',
+        rate: '11.6250',
+        rate_date: '2026-09-15',
+        source: 'ECB',
+      },
+    });
+
+    expect(tx.eurEquivalent).toEqual({
+      subtotal: '79.14',
+      taxAmount: '19.78',
+      total: '98.92',
+      rate: '11.6250',
+      rateDate: '2026-09-15',
+      source: 'ECB',
+    });
+  });
+
+  it('is null for EUR invoices or when absent', () => {
+    expect(ComplianceTransaction.fromArray(TRANSACTION_PAYLOAD).eurEquivalent).toBeNull();
+    expect(ComplianceTransaction.fromArray({ ...TRANSACTION_PAYLOAD, eur_equivalent: null }).eurEquivalent).toBeNull();
+  });
+});
+
 describe('EReportingEndpoint self-service plans', () => {
   const OFFERINGS_PAYLOAD = {
     data: [

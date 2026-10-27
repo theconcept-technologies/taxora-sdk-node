@@ -654,6 +654,21 @@ const transactions = await client.eReporting.listTransactions({
   perPage: 25,
 });
 const one = await client.eReporting.getTransaction(tx.id);
+// Non-EUR invoices carry the EUR amounts at the ECB reference rate of the invoice date
+// (null for EUR invoices or when no rate is known):
+if (one.eurEquivalent) {
+  const { total, rate, rateDate, source } = one.eurEquivalent; // decimal strings, e.g. '98.92', '11.6250'
+  console.log(`${total} EUR @ ${rate} (${source}, ${rateDate})`);
+}
+
+// The same filters (without page/perPage) as a semicolon-separated CSV for your bookkeeping —
+// incl. internal reference, delivery state, buyer rejection and the eur_rate / eur_rate_date /
+// eur_subtotal / eur_tax_amount / eur_total columns. Max 50,000 rows; returned verbatim.
+const bookkeepingCsv = await client.eReporting.exportTransactionsCsv({
+  dateFrom: '2026-01-01',
+  dateTo: '2026-09-30',
+  country: 'NO',
+});
 await client.eReporting.updateTransaction(tx.id, { total: 130, taxAmount: 21.67 });
 await client.eReporting.updateTransaction(tx.id, { internalReference: '' }); // empty string clears it
 await client.eReporting.deleteTransaction(tx.id); // resolves void on 204

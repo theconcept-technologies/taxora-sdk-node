@@ -329,6 +329,9 @@ export interface ComplianceTransactionFilters {
   perPage?: number;
 }
 
+/** Filters for exportTransactionsCsv() — the transaction list filters without pagination. */
+export type ComplianceTransactionExportFilters = Omit<ComplianceTransactionFilters, 'page' | 'perPage'>;
+
 export interface EReportingAccessRequestInput {
   name?: string;
   email?: string;
@@ -595,32 +598,7 @@ export class EReportingEndpoint {
 
   /** Paginated list of the company's transactions (newest invoice date first), filterable by date / state / type / enrollment / country / search / internal reference / provider state. */
   async listTransactions(filters: ComplianceTransactionFilters = {}): Promise<ComplianceTransactionPage> {
-    if (filters.complianceEnrollmentId !== undefined) {
-      this.validateId(filters.complianceEnrollmentId, 'complianceEnrollmentId');
-    }
-    if (filters.country !== undefined && !COUNTRY_REGEX.test(filters.country)) {
-      throw new TaxoraException('country must be a 2-character ISO 3166-1 alpha-2 code.');
-    }
-    if (filters.search !== undefined && filters.search.length > 100) {
-      throw new TaxoraException('search must not exceed 100 characters.');
-    }
-    this.validateInternalReference(filters.internalReference);
-    if (filters.providerState !== undefined && !/^[a-z_]{1,30}$/.test(filters.providerState)) {
-      throw new TaxoraException('providerState must be 1-30 lowercase letters or underscores (e.g. "refused").');
-    }
-
-    const params = new URLSearchParams();
-    if (filters.dateFrom !== undefined) params.set('date_from', this.formatDate(filters.dateFrom));
-    if (filters.dateTo !== undefined) params.set('date_to', this.formatDate(filters.dateTo));
-    if (filters.state !== undefined) params.set('state', filters.state);
-    if (filters.transactionType !== undefined) params.set('transaction_type', filters.transactionType);
-    if (filters.complianceEnrollmentId !== undefined) {
-      params.set('compliance_enrollment_id', String(filters.complianceEnrollmentId));
-    }
-    if (filters.country !== undefined) params.set('country', filters.country.toUpperCase());
-    if (filters.search !== undefined) params.set('search', filters.search);
-    if (filters.internalReference !== undefined) params.set('internal_reference', filters.internalReference);
-    if (filters.providerState !== undefined) params.set('provider_state', filters.providerState);
+    const params = this.buildTransactionFilterParams(filters);
     if (filters.page !== undefined) params.set('page', String(filters.page));
     if (filters.perPage !== undefined) params.set('per_page', String(filters.perPage));
 
@@ -629,6 +607,30 @@ export class EReportingEndpoint {
 
     const response = await this.sendRequest('GET', url);
     return ComplianceTransactionPage.fromResponse(await this.parseJsonResponse(response));
+  }
+
+  /**
+   * All transactions matching the filters as raw CSV for bookkeeping
+   * (semicolon-separated) — the same filters as listTransactions() without
+   * pagination. Columns: invoice_number, internal_reference, invoice_date,
+   * due_date, country, transaction_type, document_type, state, delivery_state,
+   * buyer_rejected, rejection_reason, counterparty_name, counterparty_country,
+   * counterparty_vat_number, currency, subtotal, tax_amount, total, eur_rate,
+   * eur_rate_date, eur_subtotal, eur_tax_amount, eur_total, provider_invoice_id,
+   * created_at. The eur_* columns hold the ECB reference conversion for non-EUR
+   * invoices (empty for EUR). Max 50,000 rows server-side. The body is returned
+   * verbatim, a UTF-8 BOM included when the API sends one.
+   */
+  async exportTransactionsCsv(filters: ComplianceTransactionExportFilters = {}): Promise<string> {
+    const queryString = this.buildTransactionFilterParams(filters).toString();
+    const url = `${this.baseUrl}/compliance/transactions/export.csv${queryString ? `?${queryString}` : ''}`;
+
+    const response = await this.sendDownloadRequest(url, 'text/csv, application/json');
+    if (!response.ok) {
+      await this.parseJsonResponse(response); // throws with the shared 422/HTTP error mapping
+    }
+    // Not response.text(): it drops the BOM, which Excel needs to read the file as UTF-8.
+    return new TextDecoder('utf-8', { ignoreBOM: true }).decode(await response.arrayBuffer());
   }
 
   /** Get a single transaction by id (includes its tax report when one exists). */
@@ -993,6 +995,37 @@ export class EReportingEndpoint {
   // ---------------------------------------------------------------------
   // Input validation (fail fast, before any request is sent)
   // ---------------------------------------------------------------------
+
+  /** Validated transaction-list filters as query params (shared by listTransactions and exportTransactionsCsv). */
+  private buildTransactionFilterParams(filters: ComplianceTransactionExportFilters): URLSearchParams {
+    if (filters.complianceEnrollmentId !== undefined) {
+      this.validateId(filters.complianceEnrollmentId, 'complianceEnrollmentId');
+    }
+    if (filters.country !== undefined && !COUNTRY_REGEX.test(filters.country)) {
+      throw new TaxoraException('country must be a 2-character ISO 3166-1 alpha-2 code.');
+    }
+    if (filters.search !== undefined && filters.search.length > 100) {
+      throw new TaxoraException('search must not exceed 100 characters.');
+    }
+    this.validateInternalReference(filters.internalReference);
+    if (filters.providerState !== undefined && !/^[a-z_]{1,30}$/.test(filters.providerState)) {
+      throw new TaxoraException('providerState must be 1-30 lowercase letters or underscores (e.g. "refused").');
+    }
+
+    const params = new URLSearchParams();
+    if (filters.dateFrom !== undefined) params.set('date_from', this.formatDate(filters.dateFrom));
+    if (filters.dateTo !== undefined) params.set('date_to', this.formatDate(filters.dateTo));
+    if (filters.state !== undefined) params.set('state', filters.state);
+    if (filters.transactionType !== undefined) params.set('transaction_type', filters.transactionType);
+    if (filters.complianceEnrollmentId !== undefined) {
+      params.set('compliance_enrollment_id', String(filters.complianceEnrollmentId));
+    }
+    if (filters.country !== undefined) params.set('country', filters.country.toUpperCase());
+    if (filters.search !== undefined) params.set('search', filters.search);
+    if (filters.internalReference !== undefined) params.set('internal_reference', filters.internalReference);
+    if (filters.providerState !== undefined) params.set('provider_state', filters.providerState);
+    return params;
+  }
 
   private validateEnrollmentInput(input: CreateComplianceEnrollmentInput): void {
     if (input.siret === undefined && input.siren === undefined) {

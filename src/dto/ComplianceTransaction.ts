@@ -71,6 +71,24 @@ export interface ComplianceTransactionInvoicePdf {
 }
 
 /**
+ * Non-EUR invoices: the amounts in EUR at the ECB reference rate of the invoice
+ * date (or the last published rate before it) — `eur_equivalent`. A reference
+ * value for bookkeeping; the invoice itself stays in its own currency. Amounts
+ * are decimal strings with two decimals, as returned by the API.
+ */
+export interface ComplianceTransactionEurEquivalent {
+  subtotal: string;
+  taxAmount: string;
+  total: string;
+  /** Units of the invoice currency per 1 EUR (ECB reference rate), as a decimal string. */
+  rate: string;
+  /** Date (YYYY-MM-DD) the ECB published the rate used. */
+  rateDate: string | null;
+  /** Where the rate comes from — currently always "ECB". */
+  source: string;
+}
+
+/**
  * E-invoicing: the Peppol directory answer about the buyer when it held the
  * invoice back (`delivery_check`) — e.g. status `not_reachable` (state
  * `not_required`) or `pending` (retried automatically). Kept as the raw object;
@@ -85,6 +103,19 @@ function toInvoicePdf(value: unknown): ComplianceTransactionInvoicePdf | null {
     filename: asNullableString(pdf['filename']),
     size: asNullableNumber(pdf['size']),
     attached: pdf['attached'] === true,
+  };
+}
+
+function toEurEquivalent(value: unknown): ComplianceTransactionEurEquivalent | null {
+  const eur = asRecord(value);
+  if (eur === null) return null;
+  return {
+    subtotal: asMoney(eur['subtotal']),
+    taxAmount: asMoney(eur['tax_amount']),
+    total: asMoney(eur['total']),
+    rate: asString(eur['rate']),
+    rateDate: asNullableString(eur['rate_date']),
+    source: asString(eur['source'], 'ECB'),
   };
 }
 
@@ -188,6 +219,11 @@ export class ComplianceTransaction {
     public readonly buyerRejected: boolean = false,
     /** E-invoicing: the buyer's reason for the rejection, when given. */
     public readonly rejectionReason: string | null = null,
+    /**
+     * Non-EUR invoices: the amounts in EUR at the ECB reference rate of the
+     * invoice date. Null for EUR invoices or when no rate is known.
+     */
+    public readonly eurEquivalent: ComplianceTransactionEurEquivalent | null = null,
   ) {}
 
   get isCreditNote(): boolean {
@@ -248,6 +284,7 @@ export class ComplianceTransaction {
       asNullableString(data['pdf_url']),
       data['buyer_rejected'] === true,
       asNullableString(data['rejection_reason']),
+      toEurEquivalent(data['eur_equivalent']),
     );
   }
 }

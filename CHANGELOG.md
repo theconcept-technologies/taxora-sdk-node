@@ -6,6 +6,13 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ### Added
 
+- **`eReporting.exportTransactionsCsv(filters)`** — `GET /compliance/transactions/export.csv`: all transactions
+  matching the `listTransactions()` filters (without pagination, type `ComplianceTransactionExportFilters`) as a
+  semicolon-separated CSV for bookkeeping, incl. internal reference, delivery state, buyer rejection and ECB EUR
+  columns (max 50,000 rows). Returned verbatim as a string.
+- **`ComplianceTransaction.eurEquivalent`** (`{ subtotal, taxAmount, total, rate, rateDate, source: 'ECB' }`): the
+  amounts of a non-EUR invoice in EUR at the ECB reference rate of the invoice date; null for EUR invoices or when no
+  rate is known.
 - **E-invoicing status signals:** `compliance.transaction.state_changed` now fires for every real change (Taxora's
   own state and the provider's delivery state: accepted, refused, paid, …; never twice, never for `sending`).
   `ComplianceTransactionWebhookObject` gained the optional `internal_reference`, `previous_state`,

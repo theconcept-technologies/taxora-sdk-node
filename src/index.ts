@@ -35,6 +35,7 @@ export type {
   ComplianceInvoiceLineInput,
   ComplianceInvoiceTaxInput,
   ComplianceTransactionFilters,
+  ComplianceTransactionExportFilters,
   EReportingAccessRequestInput,
   RevenueTaxRatesCsvFilters,
   ComplianceTransactionDocument,
@@ -105,6 +106,7 @@ export type {
   ComplianceTransactionInvoiceLineTax,
   ComplianceTransactionInvoicePdf,
   ComplianceTransactionDeliveryCheck,
+  ComplianceTransactionEurEquivalent,
 } from './dto/ComplianceTransaction.js';
 export { ComplianceOfferings } from './dto/ComplianceOfferings.js';
 export type {
