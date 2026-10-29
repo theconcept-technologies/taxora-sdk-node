@@ -28,7 +28,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
 
@@ -41,7 +41,7 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Trusted publishing needs npm >= 11.5.1; Node 20 ships npm 10. Upgraded only after
+      # Trusted publishing needs npm >= 11.5.1; pinned explicitly so it never depends on the bundled npm. Upgraded only after
       # `npm ci` so installs keep the bundled npm's behaviour.
       - name: Upgrade npm for trusted publishing
         run: npm install -g npm@^11.5.1
