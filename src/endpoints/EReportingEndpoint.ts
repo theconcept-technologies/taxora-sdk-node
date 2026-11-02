@@ -27,6 +27,11 @@ import { RetryPolicy } from '../http/RetryPolicy.js';
 import { withResponseRetries } from '../http/withRetries.js';
 import { type TokenStorageInterface } from '../http/TokenStorageInterface.js';
 import { NorwegianOrgNumber } from '../support/NorwegianOrgNumber.js';
+import {
+  COMPLIANCE_TAX_CATEGORY_CODES,
+  type ComplianceTaxCategory,
+  parseComplianceTaxCategory,
+} from '../enums/ComplianceTaxCategory.js';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const NAF_CODE_REGEX = /^\d{2}$/;
@@ -234,8 +239,8 @@ export interface ComplianceInvoiceTaxInput {
   name: string;
   /** VAT percentage, e.g. 20 or 5.5. */
   percent: number;
-  /** DGFiP tax category code (S/AA/AAA/K/G/AE/E/Z) — see getVatRates(). */
-  category: string;
+  /** Tax category code (S/AA/AAA/K/G/AE/E/Z, any case) — see getVatRates() for what a country accepts. */
+  category: ComplianceTaxCategory | Lowercase<ComplianceTaxCategory>;
   /** VATEX exemption code; required when `category` is "E". */
   comment?: string;
 }
@@ -643,6 +648,7 @@ export class EReportingEndpoint {
     this.validateBuyerFields(input);
     this.validateInternalReference(input.internalReference);
     this.validateInvoicePdfFilename(input);
+    this.validateDocument(input);
 
     const body: Record<string, unknown> = {
       compliance_enrollment_id: input.complianceEnrollmentId,
@@ -700,11 +706,13 @@ export class EReportingEndpoint {
       throw new TaxoraException('For a partial credit pass invoiceLines, subtotal, taxAmount and total together.');
     }
 
-    let invoiceLines = input.invoiceLines;
+    let invoiceLines: ComplianceInvoiceLineInput[];
     let subtotal = input.subtotal;
     let taxAmount = input.taxAmount;
     let total = input.total;
-    if (invoiceLines === undefined) {
+    if (input.invoiceLines !== undefined) {
+      invoiceLines = input.invoiceLines;
+    } else {
       invoiceLines = original.invoiceLines.map((line) => ({
         description: line.description,
         quantity: line.quantity ?? 0,
@@ -713,7 +721,7 @@ export class EReportingEndpoint {
         taxes: line.taxes.map((tax) => ({
           name: tax.name,
           percent: tax.percent ?? 0,
-          category: tax.category ?? '',
+          category: this.storedTaxCategory(tax.category),
           ...(tax.comment !== null ? { comment: tax.comment } : {}),
         })),
       }));
@@ -1423,6 +1431,26 @@ export class EReportingEndpoint {
       if (line.taxes.length === 0) {
         throw new TaxoraException(`invoiceLines[${index}].taxes must contain at least one tax.`);
       }
+      line.taxes.forEach((tax, taxIndex) => {
+        const where = `invoiceLines[${index}].taxes[${taxIndex}]`;
+        const category = parseComplianceTaxCategory(tax.category);
+        if (category === null) {
+          throw new TaxoraException(
+            `${where}.category "${String(tax.category)}" is unknown. Valid: ${COMPLIANCE_TAX_CATEGORY_CODES.join(', ')}.`,
+          );
+        }
+        if (!Number.isFinite(tax.percent) || tax.percent < 0 || tax.percent > 100) {
+          throw new TaxoraException(`${where}.percent must be between 0 and 100.`);
+        }
+        if (category === 'E' && (tax.comment === undefined || tax.comment.trim() === '')) {
+          throw new TaxoraException(
+            `${where}: an exempt (category E) tax needs the exemption code (VATEX) as comment.`,
+          );
+        }
+        if (tax.comment !== undefined && tax.comment.length > 255) {
+          throw new TaxoraException(`${where}.comment must not exceed 255 characters.`);
+        }
+      });
     });
   }
 
@@ -1442,12 +1470,54 @@ export class EReportingEndpoint {
     }
   }
 
-  private validateOptionalCodes(input: { currency?: string; counterpartyCountry?: string }): void {
-    if (input.currency !== undefined && input.currency.length !== 3) {
-      throw new TaxoraException('currency must be a 3-character ISO 4217 code.');
+  /**
+   * Relations that cannot be right: a due date before the invoice date, a credit note without (or an
+   * invoice with) a corrected invoice, a credit note that reuses the number it corrects, a corrected
+   * invoice dated after the credit note.
+   */
+  private validateDocument(input: CreateComplianceTransactionInput): void {
+    const invoiceDate = this.formatDate(input.invoiceDate);
+    if (input.dueDate !== undefined && this.formatDate(input.dueDate) < invoiceDate) {
+      throw new TaxoraException('dueDate must not be before invoiceDate.');
     }
-    if (input.counterpartyCountry !== undefined && input.counterpartyCountry.length !== 2) {
-      throw new TaxoraException('counterpartyCountry must be a 2-character ISO 3166-1 alpha-2 code.');
+    if (input.counterpartyVatNumber !== undefined && input.counterpartyVatNumber.length > 50) {
+      throw new TaxoraException('counterpartyVatNumber must not exceed 50 characters.');
+    }
+
+    const amended = input.amendedNumber?.trim() ?? '';
+    if (input.isCreditNote === true && amended === '') {
+      throw new TaxoraException('A credit note needs amendedNumber, the number of the invoice it corrects.');
+    }
+    if (input.isCreditNote !== true && amended !== '') {
+      throw new TaxoraException('amendedNumber is only for credit notes; set isCreditNote to issue one.');
+    }
+    if (amended !== '' && amended === input.invoiceNumber.trim()) {
+      throw new TaxoraException(
+        'A credit note needs its own number; it cannot reuse the number of the invoice it corrects.',
+      );
+    }
+    if (input.amendedDate !== undefined && this.formatDate(input.amendedDate) > invoiceDate) {
+      throw new TaxoraException('amendedDate (the corrected invoice) must not be after the credit note date.');
+    }
+  }
+
+  /** A category read back from a stored invoice; one that is not a known code cannot be re-sent. */
+  private storedTaxCategory(category: string | null): ComplianceTaxCategory {
+    const parsed = parseComplianceTaxCategory(category);
+    if (parsed === null) {
+      throw new TaxoraException(
+        `The original invoice has an unknown tax category "${String(category)}"; pass invoiceLines and the amounts explicitly.`,
+      );
+    }
+    return parsed;
+  }
+
+  private validateOptionalCodes(input: { currency?: string; counterpartyCountry?: string }): void {
+    if (input.currency !== undefined && !/^[A-Za-z]{3}$/.test(input.currency)) {
+      throw new TaxoraException('currency must be an ISO 4217 code, three letters (e.g. NOK, EUR).');
+    }
+    if (input.counterpartyCountry !== undefined && !/^[A-Za-z]{2}$/.test(input.counterpartyCountry)) {
+      throw new TaxoraException('counterpartyCountry must be an ISO 3166-1 alpha-2 code, two letters (e.g. NO).');
     }
   }
 
@@ -1496,7 +1566,7 @@ export class EReportingEndpoint {
           const taxBuilt: Record<string, unknown> = {
             name: tax.name,
             percent: tax.percent,
-            category: tax.category,
+            category: parseComplianceTaxCategory(tax.category) ?? tax.category,
           };
           if (tax.comment !== undefined) taxBuilt['comment'] = tax.comment;
           return taxBuilt;
@@ -1513,10 +1583,10 @@ export class EReportingEndpoint {
     input: CreateComplianceTransactionInput | UpdateComplianceTransactionInput,
   ): void {
     if (input.dueDate !== undefined) body['due_date'] = this.formatDate(input.dueDate);
-    if (input.currency !== undefined) body['currency'] = input.currency;
+    if (input.currency !== undefined) body['currency'] = input.currency.toUpperCase();
     if (input.taxAmount !== undefined) body['tax_amount'] = input.taxAmount;
     if (input.counterpartyName !== undefined) body['counterparty_name'] = input.counterpartyName;
-    if (input.counterpartyCountry !== undefined) body['counterparty_country'] = input.counterpartyCountry;
+    if (input.counterpartyCountry !== undefined) body['counterparty_country'] = input.counterpartyCountry.toUpperCase();
     if (input.counterpartyVatNumber !== undefined) body['counterparty_vat_number'] = input.counterpartyVatNumber;
     if (input.providerContactId !== undefined) body['provider_contact_id'] = input.providerContactId;
     if (input.paymentMethod !== undefined) body['payment_method'] = input.paymentMethod;

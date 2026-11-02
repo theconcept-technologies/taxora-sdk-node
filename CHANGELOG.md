@@ -4,6 +4,14 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ## [Unreleased]
 
+### Changed
+
+- `createTransaction()` refuses impossible input before the request: an unknown tax category, a category `E` tax
+  without its exemption code (`comment`), a percent outside 0–100, a currency or country code that is not letters
+  (currency, counterparty country and tax categories are upper-cased), a due date before the invoice date, a credit
+  note without `amendedNumber` (or `amendedNumber` without `isCreditNote`), a credit note reusing the number it corrects
+  and a corrected invoice dated after the credit note.
+
 ### Added
 
 - **`eReporting.createCreditNote(original, input)`** — credit an invoice you sent through Taxora. Buyer, lines, amounts,
@@ -12,6 +20,9 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
   (`not_required`) and for credit notes.
 - **`eReporting.decideDelivery(country, id, scheme?)`** — `peppolLookup()` turned into an action
   (`ComplianceDeliveryAction`: `einvoice`, `einvoice_pending`, `regular_invoice`) for a shop checkout.
+- **`calculateInvoiceTotals(lines)`** — subtotal, VAT and total of invoice lines, rounded the way the e-invoice is built,
+  so the header amounts of `createTransaction()` always match the lines.
+- **`ComplianceTaxCategory`** (`S`, `AA`, `AAA`, `K`, `G`, `AE`, `E`, `Z`) and `parseComplianceTaxCategory()`.
 - **`billing.getEInvoicingQuota(months?)`** — `GET /billing/einvoicing-quota` as `EInvoicingQuota` (documents included,
   used, still free and what is due per month); `null` without e-invoicing.
 

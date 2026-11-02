@@ -834,6 +834,18 @@ switch (decision.action) {
 }
 ```
 
+The SDK refuses input that cannot be right before any request: unknown tax categories
+(`ComplianceTaxCategory`: `S`, `AA`, `AAA`, `K`, `G`, `AE`, `E`, `Z`, any case), a category `E` line without its VATEX
+exemption code, currency and country codes that are not letters (they are upper-cased), a due date before the invoice
+date, and credit notes without (or invoices with) a corrected invoice. The API additionally checks that an e-invoice's
+`subtotal`, `taxAmount` and `total` match its lines — compute them from the lines:
+
+```ts
+import { calculateInvoiceTotals } from '@taxora/sdk';
+
+const { subtotal, taxAmount, total } = calculateInvoiceTotals(invoiceLines); // rounded like the e-invoice
+```
+
 **4. Send an invoice** — Norway requires `transactionType: 'b2b_domestic_outbound'`, the buyer's
 organisation number (`counterpartyRegisterId`) and `counterpartyName` (enforced server-side, 422):
 

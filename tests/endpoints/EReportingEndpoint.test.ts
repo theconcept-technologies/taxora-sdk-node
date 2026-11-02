@@ -602,7 +602,7 @@ describe('EReportingEndpoint.createTransaction', () => {
       tax_amount: 20,
       total: 120,
       counterparty_name: 'Kunde GmbH',
-      counterparty_country: 'de',
+      counterparty_country: 'DE',
       counterparty_vat_number: 'DE123456789',
       provider_contact_id: 'contact-1',
       invoice_lines_attributes: [
@@ -709,11 +709,11 @@ describe('EReportingEndpoint.createTransaction', () => {
     const { endpoint, client } = makeEndpoint([]);
 
     await expect(endpoint.createTransaction({ ...validTransactionInput(), currency: 'EURO' })).rejects.toThrow(
-      'currency must be a 3-character ISO 4217 code.',
+      'currency must be an ISO 4217 code, three letters',
     );
     await expect(
       endpoint.createTransaction({ ...validTransactionInput(), counterpartyCountry: 'DEU' }),
-    ).rejects.toThrow('counterpartyCountry must be a 2-character ISO 3166-1 alpha-2 code.');
+    ).rejects.toThrow('counterpartyCountry must be an ISO 3166-1 alpha-2 code, two letters');
     await expect(endpoint.createTransaction({ ...validTransactionInput(), complianceEnrollmentId: 0 })).rejects.toThrow(
       'complianceEnrollmentId must be a positive integer.',
     );
@@ -1694,7 +1694,12 @@ describe('EReportingEndpoint Norway transactions', () => {
       endpoint.createTransaction({ ...norwayTransactionInput(), extraInfo: 'x'.repeat(1001) }),
     ).rejects.toThrow('extraInfo must not exceed 1000 characters.');
     await expect(
-      endpoint.createTransaction({ ...norwayTransactionInput(), isCreditNote: true, amendedDate: '01.09.2026' }),
+      endpoint.createTransaction({
+        ...norwayTransactionInput(),
+        isCreditNote: true,
+        amendedNumber: 'NO-1',
+        amendedDate: '01.09.2026',
+      }),
     ).rejects.toThrow('Invalid date format: "01.09.2026". Expected YYYY-MM-DD.');
     await expect(endpoint.updateTransaction(100, { counterpartyEmail: '' })).rejects.toThrow(
       'counterpartyEmail must be a valid email address.',
