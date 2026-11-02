@@ -144,3 +144,69 @@ describe('BillingEndpoint.getUsageSummaries', () => {
     expect((error as HttpException).statusCode).toBe(404);
   });
 });
+
+describe('BillingEndpoint.getEInvoicingQuota', () => {
+  const period = {
+    period: '2026-12',
+    used: 72,
+    included: 50,
+    free_used: 50,
+    free_remaining: 0,
+    billable_units: 22,
+    amount: '10.78',
+    monthly_fee: '129.00',
+    total: '139.78',
+    state: 'open',
+    by_country: [{ country: 'NO', used: 72 }],
+    billed_at: null,
+    manual_reference: null,
+    monthly_fee_reference: null,
+  };
+
+  it('GETs the quota with the month count and parses current month and history', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        success: true,
+        data: {
+          billing: 'invoice',
+          plan: null,
+          currency: 'EUR',
+          included: 50,
+          tiers: [
+            { up_to: 50, unit_price: '0.0000' },
+            { up_to: null, unit_price: '0.4900' },
+          ],
+          countries: ['NO'],
+          monthly_fee: '129.00',
+          current: period,
+          history: [{ ...period, period: '2026-11', state: 'billed', manual_reference: 'RE-1042' }],
+        },
+      }),
+    ]);
+
+    const quota = await endpoint.getEInvoicingQuota(3);
+
+    expect(client.requests[0]!.url).toBe(`${BASE_URL}/billing/einvoicing-quota?months=3`);
+    expect(quota).not.toBeNull();
+    expect(quota!.billing).toBe('invoice');
+    expect(quota!.included).toBe(50);
+    expect(quota!.tiers[1]).toEqual({ upTo: null, unitPrice: '0.4900' });
+    expect(quota!.current.freeRemaining).toBe(0);
+    expect(quota!.current.billableUnits).toBe(22);
+    expect(quota!.current.byCountry).toEqual({ NO: 72 });
+    expect(quota!.history[0]!.manualReference).toBe('RE-1042');
+  });
+
+  it('resolves to null without e-invoicing', async () => {
+    const { endpoint } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true, data: null })]);
+
+    expect(await endpoint.getEInvoicingQuota()).toBeNull();
+  });
+
+  it('rejects an out-of-range month count without a request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(endpoint.getEInvoicingQuota(25)).rejects.toThrow('between 1 and 24');
+    expect(client.requests).toHaveLength(0);
+  });
+});

@@ -4,6 +4,17 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ## [Unreleased]
 
+### Added
+
+- **`eReporting.createCreditNote(original, input)`** — credit an invoice you sent through Taxora. Buyer, lines, amounts,
+  currency and the reference to the corrected invoice (number and date) are taken from `original`; partial credits pass
+  `invoiceLines`, `subtotal`, `taxAmount` and `total` together. Refused up front for invoices that were never sent
+  (`not_required`) and for credit notes.
+- **`eReporting.decideDelivery(country, id, scheme?)`** — `peppolLookup()` turned into an action
+  (`ComplianceDeliveryAction`: `einvoice`, `einvoice_pending`, `regular_invoice`) for a shop checkout.
+- **`billing.getEInvoicingQuota(months?)`** — `GET /billing/einvoicing-quota` as `EInvoicingQuota` (documents included,
+  used, still free and what is due per month); `null` without e-invoicing.
+
 ## [1.9.0] — 2026-10-27
 
 ### Added

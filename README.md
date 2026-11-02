@@ -821,6 +821,19 @@ if (reach.isPending) {
 console.log(reach.status, reach.reachable, reach.documentTypes); // 'reachable' true [...]
 ```
 
+Or let the SDK turn the answer into an action (shop checkout, one call):
+
+```ts
+const decision = await client.eReporting.decideDelivery('NO', '974760673');
+switch (decision.action) {
+  case 'einvoice': // create the transaction, Taxora sends the e-invoice
+  case 'einvoice_pending': // no answer yet: create it anyway, Taxora asks again before sending
+    break;
+  case 'regular_invoice': // not on Peppol: send your usual invoice, nothing is billed
+    break;
+}
+```
+
 **4. Send an invoice** — Norway requires `transactionType: 'b2b_domestic_outbound'`, the buyer's
 organisation number (`counterpartyRegisterId`) and `counterpartyName` (enforced server-side, 422):
 
@@ -876,6 +889,21 @@ const creditNote = await client.eReporting.createTransaction({
   ],
 });
 console.log(creditNote.isCreditNote); // true
+
+// Shorter and harder to get wrong: credit an invoice you already sent. Buyer, lines, amounts,
+// currency and the reference to the corrected invoice are taken from it.
+const credit = await client.eReporting.createCreditNote(invoice, { creditNoteNumber: 'NO-2026-0001-CN' });
+
+// Partial credit: pass the credited lines and all amounts together.
+await client.eReporting.createCreditNote(invoice, {
+  creditNoteNumber: 'NO-2026-0001-CN2',
+  invoiceLines: [
+    { description: 'Consulting', quantity: 1, price: 1000, taxes: [{ name: 'MVA', percent: 25, category: 'S' }] },
+  ],
+  subtotal: 1000,
+  taxAmount: 250,
+  total: 1250,
+});
 
 // All Norwegian documents
 const noDocs = await client.eReporting.listTransactions({ country: 'NO' });
@@ -972,6 +1000,10 @@ for (const summary of page) {
 
 const september = await client.billing.getUsageSummaries('2026-09'); // with events; 404 for a period without usage
 console.log(september[0]?.events.length);
+
+// E-invoicing allowance: documents included per month, used, still free, what is due beyond it (null without e-invoicing)
+const quota = await client.billing.getEInvoicingQuota();
+console.log(quota?.current.freeRemaining, 'of', quota?.current.included, 'documents free this month');
 ```
 
 ---

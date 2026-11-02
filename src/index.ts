@@ -32,6 +32,7 @@ export type {
   ComplianceTransactionBuyerInput,
   CreateComplianceTransactionInput,
   UpdateComplianceTransactionInput,
+  CreateCreditNoteInput,
   ComplianceInvoiceLineInput,
   ComplianceInvoiceTaxInput,
   ComplianceTransactionFilters,
@@ -125,6 +126,9 @@ export { ComplianceTaxReportPage } from './dto/ComplianceTaxReportPage.js';
 export { SireneLookupResult } from './dto/SireneLookupResult.js';
 export { RegistryCompany } from './dto/RegistryCompany.js';
 export { PeppolLookupResult } from './dto/PeppolLookupResult.js';
+export { ComplianceDeliveryDecision } from './dto/ComplianceDeliveryDecision.js';
+export { EInvoicingQuota, EInvoicingQuotaPeriod } from './dto/EInvoicingQuota.js';
+export type { EInvoicingQuotaTier } from './dto/EInvoicingQuota.js';
 export { VatRates } from './dto/VatRates.js';
 export type { VatRate } from './dto/VatRates.js';
 export { ImportResult } from './dto/ImportResult.js';
@@ -177,6 +181,7 @@ export {
   toComplianceDocumentType,
   describeComplianceDocumentType,
 } from './enums/ComplianceDocumentType.js';
+export { ComplianceDeliveryAction } from './enums/ComplianceDeliveryAction.js';
 export { PeppolLookupStatus, toPeppolLookupStatus, describePeppolLookupStatus } from './enums/PeppolLookupStatus.js';
 
 // Helpers

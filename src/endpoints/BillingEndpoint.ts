@@ -1,3 +1,4 @@
+import { EInvoicingQuota } from '../dto/EInvoicingQuota.js';
 import { UsageSummary, UsageSummaryPage } from '../dto/UsageSummary.js';
 import { HttpException } from '../exceptions/HttpException.js';
 import { describeApiError } from '../exceptions/apiErrorMessage.js';
@@ -49,6 +50,25 @@ export class BillingEndpoint {
           .filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null)
           .map(UsageSummary.fromArray)
       : [];
+  }
+
+  /**
+   * The e-invoicing allowance: documents included per month, used, still free and
+   * what is due for the documents beyond it — one pool over all e-invoicing
+   * countries, current month first, then up to `months - 1` earlier months (1-24).
+   * Resolves to null when the company has no e-invoicing.
+   */
+  async getEInvoicingQuota(months = 6): Promise<EInvoicingQuota | null> {
+    if (!Number.isInteger(months) || months < 1 || months > 24) {
+      throw new TaxoraException('months must be an integer between 1 and 24.');
+    }
+
+    const data = await this.getJson(`${this.baseUrl}/billing/einvoicing-quota?months=${months}`);
+    // getJson() hands back the whole envelope when `data` is null (no e-invoicing).
+    if (typeof data !== 'object' || data === null || Array.isArray(data) || !('billing' in data)) {
+      return null;
+    }
+    return EInvoicingQuota.fromArray(data as Record<string, unknown>);
   }
 
   private buildHeaders(): Record<string, string> {

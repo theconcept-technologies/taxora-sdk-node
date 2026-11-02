@@ -1,3 +1,4 @@
+import { ComplianceDeliveryDecision } from '../dto/ComplianceDeliveryDecision.js';
 import { ComplianceEnrollment } from '../dto/ComplianceEnrollment.js';
 import { ComplianceOfferings } from '../dto/ComplianceOfferings.js';
 import { ComplianceEnrollmentPage } from '../dto/ComplianceEnrollmentPage.js';
@@ -11,9 +12,10 @@ import { RegistryCompany } from '../dto/RegistryCompany.js';
 import { RevenueStatistics } from '../dto/RevenueStatistics.js';
 import { SireneLookupResult } from '../dto/SireneLookupResult.js';
 import { VatRates } from '../dto/VatRates.js';
+import { ComplianceDocumentType } from '../enums/ComplianceDocumentType.js';
 import { type ComplianceService } from '../enums/ComplianceService.js';
 import { type ComplianceTaxReportState } from '../enums/ComplianceTaxReportState.js';
-import { type ComplianceTransactionState } from '../enums/ComplianceTransactionState.js';
+import { ComplianceTransactionState } from '../enums/ComplianceTransactionState.js';
 import { type ComplianceTransactionType } from '../enums/ComplianceTransactionType.js';
 import { type Language } from '../enums/Language.js';
 import { HttpException } from '../exceptions/HttpException.js';
@@ -337,6 +339,26 @@ export interface UpdateComplianceTransactionInput extends ComplianceTransactionB
   internalReference?: string;
 }
 
+/**
+ * createCreditNote() input. Without invoiceLines and amounts the whole invoice is
+ * credited; for a partial credit pass invoiceLines, subtotal, taxAmount and total together.
+ */
+export interface CreateCreditNoteInput extends ComplianceInvoicePdfFields {
+  /** The credit note's own number (max 50 chars). */
+  creditNoteNumber: string;
+  /** Defaults to today. */
+  invoiceDate?: Date | string;
+  /** Partial credit: the credited lines. */
+  invoiceLines?: ComplianceInvoiceLineInput[];
+  subtotal?: number;
+  taxAmount?: number;
+  total?: number;
+  extraInfo?: string;
+  /** Your own reference (order number, RMA id), max 100 chars. */
+  internalReference?: string;
+  submitNow?: boolean;
+}
+
 export interface ComplianceTransactionFilters {
   /** Inclusive lower bound on the invoice date (Date or strict YYYY-MM-DD). */
   dateFrom?: Date | string;
@@ -580,6 +602,20 @@ export class EReportingEndpoint {
     return PeppolLookupResult.fromArray(data);
   }
 
+  /**
+   * What to do with an invoice to this buyer: peppolLookup() turned into an action,
+   * e.g. in a shop checkout when a business buyer enters its number.
+   *
+   * - `einvoice`: create the transaction, Taxora sends the e-invoice;
+   * - `regular_invoice`: the buyer is not on the network — send your regular invoice
+   *   yourself (a transaction would end as not_required and is not billed);
+   * - `einvoice_pending`: no definite answer yet — create the transaction anyway,
+   *   Taxora asks the directory again before sending.
+   */
+  async decideDelivery(country: string, id: string, scheme?: string): Promise<ComplianceDeliveryDecision> {
+    return ComplianceDeliveryDecision.fromLookup(await this.peppolLookup(country, id, scheme));
+  }
+
   // ---------------------------------------------------------------------
   // Transactions
   // ---------------------------------------------------------------------
@@ -624,6 +660,108 @@ export class EReportingEndpoint {
     // 201 = created, 200 = idempotent replay of an already-recorded invoice.
     const data = await this.parseJsonResponse(response);
     return ComplianceTransaction.fromArray(data);
+  }
+
+  /**
+   * Issue a credit note for an invoice you sent through Taxora. Everything that must
+   * match the corrected invoice is taken from `original`: enrollment, transaction type,
+   * currency, buyer (name, register id, address, e-mail, VAT number, buyer reference) —
+   * and the reference to the corrected invoice (number and date) is set for you.
+   *
+   * Without invoiceLines and amounts it credits the whole invoice: lines and amounts are
+   * taken over as they are (the document type, not the sign, makes it a credit note).
+   * For a partial credit pass invoiceLines, subtotal, taxAmount and total together.
+   *
+   * Not possible for an invoice that was never sent to the buyer (state not_required)
+   * or for a credit note. A buyer rejected the invoice? Correct it with a credit note and
+   * send a new invoice (`original.buyerRejected`).
+   */
+  async createCreditNote(
+    original: ComplianceTransaction,
+    input: CreateCreditNoteInput,
+  ): Promise<ComplianceTransaction> {
+    if (original.documentType === ComplianceDocumentType.CREDIT_NOTE) {
+      throw new TaxoraException('A credit note cannot be credited again; issue a new invoice instead.');
+    }
+    if (original.state === ComplianceTransactionState.NOT_REQUIRED) {
+      throw new TaxoraException(
+        'The invoice was never sent as an e-invoice (the buyer is not on the network), so there is nothing to credit; correct your regular invoice instead.',
+      );
+    }
+    if (original.invoiceNumber === '') {
+      throw new TaxoraException('The original transaction has no invoice number.');
+    }
+    if (original.transactionType === 'unknown') {
+      throw new TaxoraException('The original transaction has an unknown transaction type.');
+    }
+
+    const partial = [input.invoiceLines, input.subtotal, input.taxAmount, input.total];
+    if (![0, 4].includes(partial.filter((value) => value !== undefined).length)) {
+      throw new TaxoraException('For a partial credit pass invoiceLines, subtotal, taxAmount and total together.');
+    }
+
+    let invoiceLines = input.invoiceLines;
+    let subtotal = input.subtotal;
+    let taxAmount = input.taxAmount;
+    let total = input.total;
+    if (invoiceLines === undefined) {
+      invoiceLines = original.invoiceLines.map((line) => ({
+        description: line.description,
+        quantity: line.quantity ?? 0,
+        price: Number(line.price),
+        ...(line.unit !== null ? { unit: line.unit } : {}),
+        taxes: line.taxes.map((tax) => ({
+          name: tax.name,
+          percent: tax.percent ?? 0,
+          category: tax.category ?? '',
+          ...(tax.comment !== null ? { comment: tax.comment } : {}),
+        })),
+      }));
+      if (invoiceLines.length === 0) {
+        throw new TaxoraException(
+          'The original transaction carries no invoice lines; pass invoiceLines and the amounts explicitly.',
+        );
+      }
+      subtotal = Number(original.subtotal);
+      taxAmount = Number(original.taxAmount);
+      total = Number(original.total);
+    }
+
+    // Buyer data as it was on the corrected invoice; empty values are left out.
+    const buyer = Object.fromEntries(
+      Object.entries({
+        counterpartyName: original.counterpartyName,
+        counterpartyCountry: original.counterpartyCountry,
+        counterpartyVatNumber: original.counterpartyVatNumber,
+        counterpartyRegisterId: original.counterpartyRegisterId,
+        counterpartyAddress: original.counterpartyAddress,
+        counterpartyCity: original.counterpartyCity,
+        counterpartyPostalcode: original.counterpartyPostalcode,
+        counterpartyEmail: original.counterpartyEmail,
+        buyerReference: original.buyerReference,
+      }).filter(([, value]) => value !== null && value !== ''),
+    );
+
+    return this.createTransaction({
+      complianceEnrollmentId: original.complianceEnrollmentId,
+      transactionType: original.transactionType,
+      invoiceNumber: input.creditNoteNumber,
+      invoiceDate: input.invoiceDate ?? new Date(),
+      subtotal: subtotal ?? 0,
+      total: total ?? 0,
+      invoiceLines,
+      currency: original.currency,
+      ...(taxAmount !== undefined ? { taxAmount } : {}),
+      ...buyer,
+      isCreditNote: true,
+      amendedNumber: original.invoiceNumber,
+      ...(original.invoiceDate !== null ? { amendedDate: original.invoiceDate } : {}),
+      ...(input.extraInfo !== undefined ? { extraInfo: input.extraInfo } : {}),
+      ...(input.internalReference !== undefined ? { internalReference: input.internalReference } : {}),
+      ...(input.submitNow !== undefined ? { submitNow: input.submitNow } : {}),
+      ...(input.invoicePdf !== undefined ? { invoicePdf: input.invoicePdf } : {}),
+      ...(input.invoicePdfFilename !== undefined ? { invoicePdfFilename: input.invoicePdfFilename } : {}),
+    });
   }
 
   /** Paginated list of the company's transactions (newest invoice date first), filterable by date / state / type / enrollment / country / search / internal reference / provider state. */

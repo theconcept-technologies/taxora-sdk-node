@@ -2543,3 +2543,105 @@ describe('EReportingEndpoint per-country filters', () => {
     expect((error as HttpException).responseBody).toContain('read_only_role');
   });
 });
+
+describe('EReportingEndpoint.createCreditNote', () => {
+  const originalPayload = {
+    ...NORWAY_TRANSACTION_PAYLOAD,
+    id: 90,
+    state: 'submitted',
+    document_type: 'invoice',
+    invoice_number: 'NO-2026-0001',
+    invoice_date: '2026-09-01',
+    amended_number: null,
+    amended_date: null,
+    subtotal: '2000.0000',
+    tax_amount: '500.0000',
+    total: '2500.0000',
+  };
+
+  it('copies buyer, lines, amounts and references the corrected invoice', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(NORWAY_TRANSACTION_PAYLOAD, 201)]);
+    const original = ComplianceTransaction.fromArray(originalPayload);
+
+    const creditNote = await endpoint.createCreditNote(original, {
+      creditNoteNumber: 'NO-CN-1',
+      invoiceDate: '2026-10-01',
+      internalReference: 'RMA-5',
+    });
+
+    expect(creditNote.isCreditNote).toBe(true);
+    const body = JSON.parse(client.requests[0]!.options?.body as string) as Record<string, any>;
+    expect(body['compliance_enrollment_id']).toBe(13);
+    expect(body['transaction_type']).toBe('b2b_domestic_outbound');
+    expect(body['invoice_number']).toBe('NO-CN-1');
+    expect(body['invoice_date']).toBe('2026-10-01');
+    expect(body['currency']).toBe('NOK');
+    expect(body['is_credit_note']).toBe(true);
+    expect(body['amended_number']).toBe('NO-2026-0001');
+    expect(body['amended_date']).toBe('2026-09-01');
+    expect(body['counterparty_register_id']).toBe('923609016');
+    expect(body['counterparty_name']).toBe('EQUINOR ASA');
+    expect(body['buyer_reference']).toBe('PO-4711');
+    expect(body['total']).toBe(2500);
+    expect(body['invoice_lines_attributes'][0]['description']).toBe('Consulting');
+    expect(body['invoice_lines_attributes'][0]['taxes_attributes'][0]['name']).toBe('MVA');
+    expect(body['internal_reference']).toBe('RMA-5');
+  });
+
+  it('accepts explicit lines and amounts for a partial credit', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(NORWAY_TRANSACTION_PAYLOAD, 201)]);
+
+    await endpoint.createCreditNote(ComplianceTransaction.fromArray(originalPayload), {
+      creditNoteNumber: 'NO-CN-2',
+      invoiceDate: '2026-10-01',
+      invoiceLines: [
+        { description: 'Consulting', quantity: 1, price: 1000, taxes: [{ name: 'MVA', percent: 25, category: 'S' }] },
+      ],
+      subtotal: 1000,
+      taxAmount: 250,
+      total: 1250,
+    });
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string) as Record<string, any>;
+    expect(body['total']).toBe(1250);
+    expect(body['invoice_lines_attributes']).toHaveLength(1);
+  });
+
+  it('rejects partial arguments, unsent invoices and credit notes without a request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+    const original = ComplianceTransaction.fromArray(originalPayload);
+
+    await expect(endpoint.createCreditNote(original, { creditNoteNumber: 'X', total: 10 })).rejects.toThrow(
+      'invoiceLines, subtotal, taxAmount and total together',
+    );
+    await expect(
+      endpoint.createCreditNote(ComplianceTransaction.fromArray({ ...originalPayload, state: 'not_required' }), {
+        creditNoteNumber: 'X',
+      }),
+    ).rejects.toThrow('never sent as an e-invoice');
+    await expect(
+      endpoint.createCreditNote(ComplianceTransaction.fromArray({ ...originalPayload, document_type: 'credit_note' }), {
+        creditNoteNumber: 'X',
+      }),
+    ).rejects.toThrow('cannot be credited again');
+    expect(client.requests).toHaveLength(0);
+  });
+});
+
+describe('EReportingEndpoint.decideDelivery', () => {
+  it.each([
+    ['reachable', true, 'einvoice'],
+    ['not_reachable', false, 'regular_invoice'],
+    ['pending', null, 'einvoice_pending'],
+  ])('maps a %s buyer to %s', async (status, reachable, action) => {
+    const { endpoint } = makeEndpoint([
+      envelope({ status, reachable, country: 'NO', scheme: '0192', id: '923609016', document_types: [] }),
+    ]);
+
+    const decision = await endpoint.decideDelivery('NO', '923609016');
+
+    expect(decision.action).toBe(action);
+    expect(decision.lookup.status).toBe(status);
+    expect(decision.sendsEInvoice).toBe(action !== 'regular_invoice');
+  });
+});
