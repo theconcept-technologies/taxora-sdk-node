@@ -846,7 +846,7 @@ import { calculateInvoiceTotals } from '@taxora/sdk';
 const { subtotal, taxAmount, total } = calculateInvoiceTotals(invoiceLines); // rounded like the e-invoice
 ```
 
-Taxes without remembering category codes: `ComplianceTax.rate(25)` (category `S`, any rate above 0 %), `zeroRated()` (`Z`),
+Taxes without remembering category codes: `ComplianceTax.rate(25)` (category `S`, any rate above 0 %; in Norway 25/15/12 % are all `S`, for France's reduced rates pass `ComplianceTax.rate(10, 'TVA', 'AA')`), `zeroRated()` (`Z`),
 `exempt('VATEX-EU-132')` (`E`, code mandatory) and `reverseCharge()` (`AE`). The rate itself is yours to know; the API checks
 it against the country's catalogue. The tax name defaults to `VAT` (`ComplianceTax.rate(25, 'MVA')`).
 

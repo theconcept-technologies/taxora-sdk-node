@@ -1476,6 +1476,20 @@ export class EReportingEndpoint {
    * invoice dated after the credit note.
    */
   private validateDocument(input: CreateComplianceTransactionInput): void {
+    for (const [field, value] of [
+      ['subtotal', input.subtotal],
+      ['taxAmount', input.taxAmount],
+      ['total', input.total],
+    ] as const) {
+      if (value !== undefined && !Number.isFinite(Number(value))) {
+        throw new TaxoraException(`${field} must be a finite number.`);
+      }
+    }
+    for (const line of input.invoiceLines ?? []) {
+      if (!Number.isFinite(line.quantity) || !Number.isFinite(line.price)) {
+        throw new TaxoraException('Every invoice line needs a numeric quantity and price.');
+      }
+    }
     const invoiceDate = this.formatDate(input.invoiceDate);
     if (input.dueDate !== undefined && this.formatDate(input.dueDate) < invoiceDate) {
       throw new TaxoraException('dueDate must not be before invoiceDate.');

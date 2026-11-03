@@ -104,6 +104,7 @@ describe('invoice input that cannot be right is refused before a request', () =>
     ['a currency with digits', { currency: 'N0K' }, 'three letters'],
     ['a country with three letters', { counterpartyCountry: 'NOR' }, 'two letters'],
     ['a due date before the invoice date', { dueDate: '2027-01-01' }, 'dueDate must not be before'],
+    ['a total that is not a number', { total: Number.NaN }, 'must be a finite number'],
     ['a credit note without reference', { isCreditNote: true }, 'needs amendedNumber'],
     ['a reference without credit note', { amendedNumber: 'NO-1' }, 'only for credit notes'],
     ['a credit note reusing its number', { isCreditNote: true, amendedNumber: 'NO-2' }, 'cannot reuse'],
@@ -183,5 +184,16 @@ describe('ComplianceTax and expectedTotal', () => {
     expect(calculateInvoiceTotals(lines, { expectedTotal: 124.99 }).roundingDifference).toBe(0);
     expect(calculateInvoiceTotals(lines, { expectedTotal: 125.02 }).roundingDifference).toBe(0.03);
     expect(() => calculateInvoiceTotals(lines, { expectedTotal: 130 })).toThrow('differs from the invoice lines');
+  });
+
+  it('rounds half away from zero on the decimal value', () => {
+    const only = (quantity: number, price: number) =>
+      calculateInvoiceTotals([{ description: 'x', quantity, price, taxes: [ComplianceTax.rate(25)] }]);
+    expect(only(223, 240.545).subtotal).toBe(53641.54); // 53641.535 exactly, despite float noise
+    expect(only(12.2, 427.533).taxAmount).toBe(1303.98);
+  });
+
+  it('accepts a category for rate()', () => {
+    expect(ComplianceTax.rate(10, 'TVA', 'AA')).toMatchObject({ category: 'AA', percent: 10 });
   });
 });

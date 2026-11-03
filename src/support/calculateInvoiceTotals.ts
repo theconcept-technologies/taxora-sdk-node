@@ -21,8 +21,10 @@ export interface InvoiceTotalsOptions {
   tolerance?: number;
 }
 
+/** Half away from zero on the decimal value (a pre-rounding step absorbs float noise like 53641.534999999996). */
 function round2(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
+  const magnitude = Math.round(Number((Math.abs(value) * 100).toPrecision(15)));
+  return (value < 0 ? -magnitude : magnitude) / 100;
 }
 
 /**

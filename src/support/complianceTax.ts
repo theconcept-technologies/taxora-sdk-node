@@ -6,12 +6,19 @@ import { ComplianceTaxCategory } from '../enums/ComplianceTaxCategory.js';
  * the API checks it against the country's catalogue (see eReporting.getVatRates()). The name defaults to "VAT".
  */
 export const ComplianceTax = {
-  /** A taxed rate above 0 % (category S). */
-  rate(percent: number, name = 'VAT'): ComplianceInvoiceTaxInput {
+  /**
+   * A taxed rate above 0 %, category S (Norway: 25 / 15 / 12 % are all S). Where a country files reduced rates
+   * under their own category (France: AA / AAA), pass it as `category`.
+   */
+  rate(
+    percent: number,
+    name = 'VAT',
+    category: ComplianceInvoiceTaxInput['category'] = ComplianceTaxCategory.STANDARD,
+  ): ComplianceInvoiceTaxInput {
     if (!Number.isFinite(percent) || percent <= 0) {
       throw new Error('rate() needs a percent above 0; for 0 % use zeroRated(), exempt() or reverseCharge().');
     }
-    return { name, percent, category: ComplianceTaxCategory.STANDARD };
+    return { name, percent, category };
   },
 
   /** 0 % but taxable (category Z). */
