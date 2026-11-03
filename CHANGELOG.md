@@ -4,6 +4,8 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-11-03
+
 ### Added
 
 - `ComplianceTax.rate()`, `zeroRated()`, `exempt()` and `reverseCharge()` build line taxes with the right category.
