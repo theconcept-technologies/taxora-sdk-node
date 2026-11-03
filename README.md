@@ -846,6 +846,16 @@ import { calculateInvoiceTotals } from '@taxora/sdk';
 const { subtotal, taxAmount, total } = calculateInvoiceTotals(invoiceLines); // rounded like the e-invoice
 ```
 
+Taxes without remembering category codes: `ComplianceTax.rate(25)` (category `S`, any rate above 0 %), `zeroRated()` (`Z`),
+`exempt('VATEX-EU-132')` (`E`, code mandatory) and `reverseCharge()` (`AE`). The rate itself is yours to know; the API checks
+it against the country's catalogue. The tax name defaults to `VAT` (`ComplianceTax.rate(25, 'MVA')`).
+
+If your own system already shows the buyer a total, pass it as a safety net:
+`calculateInvoiceTotals(lines, { expectedTotal: 1249.99 })`. The totals always follow the lines, because the e-invoice is built
+from them. A difference up to 0.05 is reported as `roundingDifference`; anything larger throws, since then quantities, prices or
+rates are wrong. The invoice number is printed on the buyer's e-invoice and must be unique per enrollment (a different invoice
+with a used number answers `409 invoice_number_taken`).
+
 **4. Send an invoice** — Norway requires `transactionType: 'b2b_domestic_outbound'`, the buyer's
 organisation number (`counterpartyRegisterId`) and `counterpartyName` (enforced server-side, 422):
 

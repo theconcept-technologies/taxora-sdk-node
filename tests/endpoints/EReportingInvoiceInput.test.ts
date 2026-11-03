@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { EReportingEndpoint, type CreateComplianceTransactionInput } from '../../src/endpoints/EReportingEndpoint.js';
+import { ComplianceTax } from '../../src/support/complianceTax.js';
 import { calculateInvoiceTotals } from '../../src/support/calculateInvoiceTotals.js';
 import { parseComplianceTaxCategory } from '../../src/enums/ComplianceTaxCategory.js';
 import { InMemoryTokenStorage } from '../../src/http/InMemoryTokenStorage.js';
@@ -150,7 +151,7 @@ describe('calculateInvoiceTotals', () => {
       { description: 'Export', quantity: 1, price: 5, taxes: [{ name: 'MVA', percent: 0, category: 'Z' }] },
     ]);
 
-    expect(totals).toEqual({ subtotal: 358.33, taxAmount: 85.73, total: 444.06 });
+    expect(totals).toEqual({ subtotal: 358.33, taxAmount: 85.73, total: 444.06, roundingDifference: 0 });
   });
 });
 
@@ -160,5 +161,27 @@ describe('parseComplianceTaxCategory', () => {
     expect(parseComplianceTaxCategory(' z ')).toBe('Z');
     expect(parseComplianceTaxCategory('X')).toBeNull();
     expect(parseComplianceTaxCategory(25)).toBeNull();
+  });
+});
+
+describe('ComplianceTax and expectedTotal', () => {
+  const lines = [{ description: 'A', quantity: 3, price: 33.33, taxes: [ComplianceTax.rate(25)] }];
+
+  it('sets the category for the common cases', () => {
+    expect(ComplianceTax.rate(25)).toMatchObject({ percent: 25, category: 'S' });
+    expect(ComplianceTax.zeroRated().category).toBe('Z');
+    expect(ComplianceTax.reverseCharge().category).toBe('AE');
+    expect(ComplianceTax.exempt('VATEX-EU-132')).toMatchObject({ category: 'E', comment: 'VATEX-EU-132' });
+  });
+
+  it('refuses rate(0) and an exemption without a code', () => {
+    expect(() => ComplianceTax.rate(0)).toThrow('zeroRated()');
+    expect(() => ComplianceTax.exempt(' ')).toThrow('exemption code');
+  });
+
+  it('reports rounding and refuses real differences', () => {
+    expect(calculateInvoiceTotals(lines, { expectedTotal: 124.99 }).roundingDifference).toBe(0);
+    expect(calculateInvoiceTotals(lines, { expectedTotal: 125.02 }).roundingDifference).toBe(0.03);
+    expect(() => calculateInvoiceTotals(lines, { expectedTotal: 130 })).toThrow('differs from the invoice lines');
   });
 });

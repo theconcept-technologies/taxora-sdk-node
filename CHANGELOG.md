@@ -4,6 +4,11 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ## [Unreleased]
 
+### Added
+
+- `ComplianceTax.rate()`, `zeroRated()`, `exempt()` and `reverseCharge()` build line taxes with the right category.
+- `calculateInvoiceTotals(lines, { expectedTotal })` checks your own total against the lines and reports `roundingDifference`.
+
 ### Changed
 
 - `createTransaction()` refuses impossible input before the request: an unknown tax category, a category `E` tax

@@ -184,7 +184,8 @@ export {
 export { ComplianceDeliveryAction } from './enums/ComplianceDeliveryAction.js';
 export { ComplianceTaxCategory, parseComplianceTaxCategory } from './enums/ComplianceTaxCategory.js';
 export { calculateInvoiceTotals } from './support/calculateInvoiceTotals.js';
-export type { InvoiceTotals } from './support/calculateInvoiceTotals.js';
+export type { InvoiceTotals, InvoiceTotalsOptions } from './support/calculateInvoiceTotals.js';
+export { ComplianceTax } from './support/complianceTax.js';
 export { PeppolLookupStatus, toPeppolLookupStatus, describePeppolLookupStatus } from './enums/PeppolLookupStatus.js';
 
 // Helpers
