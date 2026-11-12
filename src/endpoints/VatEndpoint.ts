@@ -58,7 +58,7 @@ export class VatEndpoint {
     if (provider) body['source'] = provider;
 
     return withRetries(this.retryPolicy, 'VAT validation', async () => {
-      const response = await this.sendRequest('POST', `${this.baseUrl}/vat/validate/multiple`, body);
+      const response = await this.sendRequest('POST', `${this.baseUrl}/vat/validate-multiple`, body);
       const data = await this.parseJsonResponse(response);
 
       return VatCollection.fromResponse(data);
@@ -68,7 +68,7 @@ export class VatEndpoint {
   async validateSchema(vatUid: string): Promise<Record<string, unknown>> {
     const body: Record<string, unknown> = { vat_uid: vatUid };
     return withRetries(this.retryPolicy, 'VAT schema check', async () => {
-      const response = await this.sendRequest('POST', `${this.baseUrl}/vat/validate/schema`, body);
+      const response = await this.sendRequest('POST', `${this.baseUrl}/vat/validate-schema`, body);
 
       return this.parseJsonResponse(response);
     });
@@ -76,7 +76,7 @@ export class VatEndpoint {
 
   async state(vatUid: string): Promise<VatResource> {
     return withRetries(this.retryPolicy, 'VAT state lookup', async () => {
-      const response = await this.sendRequest('GET', `${this.baseUrl}/vat/state/${encodeURIComponent(vatUid)}`);
+      const response = await this.sendRequest('POST', `${this.baseUrl}/vat/state`, { vat_uid: vatUid });
       const data = await this.parseJsonResponse(response);
 
       return VatResource.fromArray(data);
@@ -84,11 +84,10 @@ export class VatEndpoint {
   }
 
   async history(vatUid?: string): Promise<VatCollection> {
-    let url = `${this.baseUrl}/vat/history`;
-    if (vatUid) url += `?vat_uid=${encodeURIComponent(vatUid)}`;
+    const body: Record<string, unknown> = vatUid ? { vat_uid: vatUid } : {};
 
     return withRetries(this.retryPolicy, 'VAT history request', async () => {
-      const response = await this.sendRequest('GET', url);
+      const response = await this.sendRequest('POST', `${this.baseUrl}/vat/history`, body);
       const data = await this.parseJsonResponse(response);
 
       return VatCollection.fromResponse(data);
@@ -96,15 +95,12 @@ export class VatEndpoint {
   }
 
   async search(term?: string, perPage?: number): Promise<VatCollection> {
-    const params = new URLSearchParams();
-    if (term) params.set('term', term);
-    if (perPage !== undefined) params.set('per_page', String(perPage));
-
-    const queryString = params.toString();
-    const url = `${this.baseUrl}/vat/search${queryString ? `?${queryString}` : ''}`;
+    const body: Record<string, unknown> = {};
+    if (term) body['search'] = term;
+    if (perPage !== undefined) body['perPage'] = perPage;
 
     return withRetries(this.retryPolicy, 'VAT search', async () => {
-      const response = await this.sendRequest('GET', url);
+      const response = await this.sendRequest('POST', `${this.baseUrl}/vat/search`, body);
       const data = await this.parseJsonResponse(response);
 
       return VatCollection.fromResponse(data);
@@ -112,11 +108,11 @@ export class VatEndpoint {
   }
 
   async certificate(uuid: string, lang?: Language): Promise<Uint8Array> {
-    let url = `${this.baseUrl}/vat/certificate/${encodeURIComponent(uuid)}`;
-    if (lang) url += `?lang=${lang}`;
+    const body: Record<string, unknown> = { uuid };
+    if (lang) body['lang'] = lang;
 
     return withRetries(this.retryPolicy, 'VAT certificate download', async () => {
-      const response = await this.sendBinaryRequest('GET', url);
+      const response = await this.sendBinaryRequest('POST', `${this.baseUrl}/vat/certificate`, body);
       const buffer = await response.arrayBuffer();
 
       return new Uint8Array(buffer);
@@ -167,7 +163,7 @@ export class VatEndpoint {
   }
 
   async downloadBulkExport(exportId: string): Promise<Uint8Array> {
-    const url = `${this.baseUrl}/vat/certificates/bulk-export/${encodeURIComponent(exportId)}/download`;
+    const url = `${this.baseUrl}/vat/certificates/download/${encodeURIComponent(exportId)}`;
 
     return withRetries(this.retryPolicy, 'VAT export download', async () => {
       const response = await this.sendBinaryRequest('GET', url);
@@ -271,11 +267,15 @@ export class VatEndpoint {
     return this.httpClient.request(method, url, options);
   }
 
-  private async sendBinaryRequest(method: string, url: string): Promise<Response> {
+  private async sendBinaryRequest(method: string, url: string, body?: Record<string, unknown>): Promise<Response> {
     const headers = this.buildHeaders();
-    delete headers['Content-Type'];
+    if (!body) delete headers['Content-Type'];
 
-    const response = await this.httpClient.request(method, url, { headers });
+    const response = await this.httpClient.request(
+      method,
+      url,
+      body ? { headers, body: JSON.stringify(body) } : { headers },
+    );
     if (!response.ok) {
       const text = await response.text();
       throw new HttpException(

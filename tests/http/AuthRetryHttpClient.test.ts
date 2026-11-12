@@ -24,6 +24,35 @@ describe('AuthRetryHttpClient', () => {
     expect(inner.requests).toHaveLength(1);
   });
 
+  it('passes the real token routes (/v1/login, /v1/refresh) through', async () => {
+    const storage = new InMemoryTokenStorage();
+    storage.set(makeToken(-1000));
+    const inner = new SequenceHttpClient([
+      SequenceHttpClient.jsonResponse({ ok: true }),
+      SequenceHttpClient.jsonResponse({ ok: true }),
+    ]);
+    const refreshFn = vi.fn().mockResolvedValue(REFRESH_TOKEN);
+    const client = new AuthRetryHttpClient(inner, storage, refreshFn);
+
+    await client.request('POST', 'https://sandbox.taxora.io/v1/login', {});
+    await client.request('POST', 'https://sandbox.taxora.io/v1/refresh', {});
+
+    expect(refreshFn).not.toHaveBeenCalled();
+    expect(inner.requests).toHaveLength(2);
+  });
+
+  it('does not treat other routes ending in login as token routes', async () => {
+    const storage = new InMemoryTokenStorage();
+    storage.set(makeToken(-1000));
+    const inner = new SequenceHttpClient([SequenceHttpClient.jsonResponse({ data: {} })]);
+    const refreshFn = vi.fn().mockResolvedValue(REFRESH_TOKEN);
+    const client = new AuthRetryHttpClient(inner, storage, refreshFn);
+
+    await client.request('GET', 'https://sandbox.taxora.io/v1/compliance/enrollments', {});
+
+    expect(refreshFn).toHaveBeenCalledOnce();
+  });
+
   it('does not refresh when token is valid', async () => {
     const storage = new InMemoryTokenStorage();
     storage.set(makeToken(3600_000));

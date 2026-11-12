@@ -20,6 +20,16 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
   `createTransaction()`, `updateTransaction()` and `createCreditNote()`; unknown values are refused before the request.
   For the Peppol countries the buyer's Peppol id goes into the existing `counterpartyRegisterId`.
 
+### Fixed
+
+- **Login and token refresh** called `/v1/auth/login` and `/v1/auth/refresh`, which do not exist (404 on sandbox and
+  production); they now call `/v1/login` and `/v1/refresh` like the API and the PHP SDK.
+- **VAT endpoints aligned with the API:** `validateMultiple()` → `POST /vat/validate-multiple`, `validateSchema()` →
+  `POST /vat/validate-schema`, `state()` → `POST /vat/state` (`vat_uid` in the body), `history()` → `POST /vat/history`,
+  `search()` → `POST /vat/search` (`search`, `perPage` in the body), `certificate()` → `POST /vat/certificate`
+  (`uuid`, `lang` in the body), `downloadBulkExport()` → `GET /vat/certificates/download/{exportId}`. Checked end to
+  end against a running backend.
+
 ## [1.10.0] - 2026-11-03
 
 ### Added

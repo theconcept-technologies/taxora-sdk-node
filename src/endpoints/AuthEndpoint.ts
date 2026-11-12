@@ -39,7 +39,7 @@ export class AuthEndpoint {
     }
 
     const data = await withRetries(this.retryPolicy, 'login', async () => {
-      const response = await this.httpClient.request('POST', `${this.baseUrl}/auth/login`, {
+      const response = await this.httpClient.request('POST', `${this.baseUrl}/login`, {
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': this.apiKey,
@@ -90,7 +90,7 @@ export class AuthEndpoint {
     }
 
     const data = await withRetries(this.retryPolicy, 'token refresh', async () => {
-      const response = await this.httpClient.request('POST', `${this.baseUrl}/auth/refresh`, { headers });
+      const response = await this.httpClient.request('POST', `${this.baseUrl}/refresh`, { headers });
       const responseText = await response.text();
 
       if (response.status === 401) {

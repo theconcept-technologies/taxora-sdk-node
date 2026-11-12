@@ -40,7 +40,7 @@ describe('AuthEndpoint.login', () => {
 
     const req = client.requests[0]!;
     expect(req.method).toBe('POST');
-    expect(req.url).toBe(`${BASE_URL}/auth/login`);
+    expect(req.url).toBe(`${BASE_URL}/login`);
 
     const body = JSON.parse(req.options?.body as string);
     expect(body.email).toBe('user@example.com');
@@ -139,7 +139,7 @@ describe('AuthEndpoint.refresh', () => {
     expect(storage.get()).toBe(refreshed);
 
     const refreshReq = client.requests[1]!;
-    expect(refreshReq.url).toBe(`${BASE_URL}/auth/refresh`);
+    expect(refreshReq.url).toBe(`${BASE_URL}/refresh`);
     const headers = refreshReq.options?.headers as Record<string, string>;
     expect(headers['Authorization']).toBe('Bearer my-access-token');
   });

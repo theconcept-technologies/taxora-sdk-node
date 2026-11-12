@@ -63,7 +63,7 @@ describe('TaxoraClient', () => {
 
     expect(job.jobId).toBe('job-1');
     expect(client.requests).toHaveLength(3);
-    expect(client.requests[1]?.url).toContain('/auth/refresh');
+    expect(client.requests[1]?.url).toContain('/v1/refresh');
     const retryHeaders = client.requests[2]?.options?.headers as Record<string, string>;
     expect(retryHeaders['Authorization']).toBe('Bearer refreshed-token');
   });
@@ -82,7 +82,7 @@ describe('TaxoraClient', () => {
     expect(page.length).toBe(0);
     expect(client.requests).toHaveLength(3);
     expect(client.requests[0]?.url).toContain('/compliance/enrollments');
-    expect(client.requests[1]?.url).toContain('/auth/refresh');
+    expect(client.requests[1]?.url).toContain('/v1/refresh');
     const retryHeaders = client.requests[2]?.options?.headers as Record<string, string>;
     expect(retryHeaders['Authorization']).toBe('Bearer refreshed-token');
   });
@@ -108,7 +108,7 @@ describe('TaxoraClient', () => {
     await taxoraClient.company.get();
 
     // refresh was called first
-    expect(client.requests[0]?.url).toContain('/auth/refresh');
+    expect(client.requests[0]?.url).toContain('/v1/refresh');
     // then company was called with the new token
     const companyHeaders = client.requests[1]?.options?.headers as Record<string, string>;
     expect(companyHeaders['Authorization']).toBe('Bearer refreshed-token');
@@ -126,7 +126,7 @@ describe('TaxoraClient', () => {
     const result = await taxoraClient.company.get();
     expect(result).toEqual({ id: 1, name: 'Test Company', api_rate_limit: 120, vat_rate_limit: 80 });
     expect(client.requests).toHaveLength(3);
-    expect(client.requests[1]?.url).toContain('/auth/refresh');
+    expect(client.requests[1]?.url).toContain('/v1/refresh');
   });
 
   it('normalizes legacy company rate_limit through the public client', async () => {

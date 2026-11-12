@@ -3,13 +3,14 @@ import { AuthenticationException } from '../exceptions/AuthenticationException.j
 import { type HttpClientInterface } from './HttpClientInterface.js';
 import { type TokenStorageInterface } from './TokenStorageInterface.js';
 
-const AUTH_PATH_PATTERN = /\/auth\//;
+// The token routes themselves (/v1/login, /v1/refresh, /v1/auth/social/login) are never retried.
+const AUTH_PATH_PATTERN = /\/(login|refresh)(\/two-factor-challenge)?(\?|$)|\/auth\//;
 
 /**
  * HTTP client wrapper that handles:
  * - Preemptive token refresh when the stored token is expired
  * - Automatic retry with a fresh token on 401 responses
- * - Passthrough for /auth/ routes (no interception)
+ * - Passthrough for the token routes (login, refresh, /auth/) — no interception
  */
 export class AuthRetryHttpClient implements HttpClientInterface {
   constructor(

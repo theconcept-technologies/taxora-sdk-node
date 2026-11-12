@@ -332,18 +332,19 @@ describe('VatEndpoint.validateSchema', () => {
 });
 
 describe('VatEndpoint.state', () => {
-  it('GET /vat/state/{uid} returns VatResource', async () => {
+  it('POST /vat/state with vat_uid returns VatResource', async () => {
     const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse(VAT_RESPONSE)]);
 
     const result = await endpoint.state('ATU12345678');
     expect(result).toBeInstanceOf(VatResource);
-    expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/state/ATU12345678`);
-    expect(client.requests[0]?.method).toBe('GET');
+    expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/state`);
+    expect(client.requests[0]?.method).toBe('POST');
+    expect(JSON.parse(client.requests[0]?.options?.body as string).vat_uid).toBe('ATU12345678');
   });
 });
 
 describe('VatEndpoint.history', () => {
-  it('GET /vat/history returns VatCollection', async () => {
+  it('POST /vat/history returns VatCollection', async () => {
     const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true, data: [] })]);
 
     const result = await endpoint.history();
@@ -351,47 +352,52 @@ describe('VatEndpoint.history', () => {
     expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/history`);
   });
 
-  it('GET /vat/history with vatUid filter', async () => {
+  it('POST /vat/history with vatUid filter', async () => {
     const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true, data: [] })]);
 
     await endpoint.history('ATU12345678');
-    expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/history?vat_uid=ATU12345678`);
+    expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/history`);
+    expect(client.requests[0]?.method).toBe('POST');
+    expect(JSON.parse(client.requests[0]?.options?.body as string).vat_uid).toBe('ATU12345678');
   });
 });
 
 describe('VatEndpoint.search', () => {
-  it('GET /vat/search returns VatCollection', async () => {
+  it('POST /vat/search returns VatCollection', async () => {
     const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true, data: [] })]);
 
     const result = await endpoint.search('Alpha');
     expect(result).toBeInstanceOf(VatCollection);
-    expect(client.requests[0]?.url).toContain('/vat/search');
-    expect(client.requests[0]?.url).toContain('term=Alpha');
+    expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/search`);
+    expect(client.requests[0]?.method).toBe('POST');
+    expect(JSON.parse(client.requests[0]?.options?.body as string).search).toBe('Alpha');
   });
 
   it('includes perPage parameter', async () => {
     const { endpoint, client } = makeEndpoint([SequenceHttpClient.jsonResponse({ success: true, data: [] })]);
 
     await endpoint.search('Alpha', 25);
-    expect(client.requests[0]?.url).toContain('per_page=25');
+    expect(JSON.parse(client.requests[0]?.options?.body as string).perPage).toBe(25);
   });
 });
 
 describe('VatEndpoint.certificate', () => {
-  it('GET /vat/certificate/{uuid} returns binary', async () => {
+  it('POST /vat/certificate with uuid returns binary', async () => {
     const pdfData = new Uint8Array([1, 2, 3, 4]);
     const { endpoint, client } = makeEndpoint([SequenceHttpClient.binaryResponse(pdfData)]);
 
     const result = await endpoint.certificate('uuid-123');
     expect(result).toBeInstanceOf(Uint8Array);
-    expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/certificate/uuid-123`);
+    expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/certificate`);
+    expect(client.requests[0]?.method).toBe('POST');
+    expect(JSON.parse(client.requests[0]?.options?.body as string).uuid).toBe('uuid-123');
   });
 
   it('includes lang parameter when provided', async () => {
     const { endpoint, client } = makeEndpoint([SequenceHttpClient.binaryResponse(new Uint8Array())]);
 
     await endpoint.certificate('uuid-123', Language.GERMAN);
-    expect(client.requests[0]?.url).toContain('lang=de');
+    expect(JSON.parse(client.requests[0]?.options?.body as string).lang).toBe('de');
   });
 });
 
@@ -461,13 +467,13 @@ describe('VatEndpoint.certificatesListExport', () => {
 });
 
 describe('VatEndpoint.downloadBulkExport', () => {
-  it('GET /vat/certificates/bulk-export/{id}/download returns binary', async () => {
+  it('GET /vat/certificates/download/{id} returns binary', async () => {
     const zipData = new Uint8Array([5, 6, 7, 8]);
     const { endpoint, client } = makeEndpoint([SequenceHttpClient.binaryResponse(zipData)]);
 
     const result = await endpoint.downloadBulkExport('exp-123');
     expect(result).toBeInstanceOf(Uint8Array);
-    expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/certificates/bulk-export/exp-123/download`);
+    expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/certificates/download/exp-123`);
   });
 });
 
