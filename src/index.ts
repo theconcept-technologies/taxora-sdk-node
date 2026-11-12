@@ -16,7 +16,7 @@ export type {
   SmartEnrichmentStatisticsOptions,
   SmartEnrichmentWaitOptions,
 } from './endpoints/SmartEnrichmentEndpoint.js';
-export { EReportingEndpoint } from './endpoints/EReportingEndpoint.js';
+export { EReportingEndpoint, PEPPOL_PARTICIPANT_SCHEMES } from './endpoints/EReportingEndpoint.js';
 export type {
   RevenueStatisticsFilters,
   EReportingInterval,
@@ -29,6 +29,13 @@ export type {
   CreateComplianceEnrollmentInput,
   CreateNorwayEnrollmentInput,
   NorwayEnrollmentInput,
+  CreateGermanyEnrollmentInput,
+  GermanyEnrollmentInput,
+  CreatePeppolEnrollmentInput,
+  AnyComplianceEnrollmentInput,
+  PeppolEInvoicingCountry,
+  ComplianceEInvoiceFormat,
+  ComplianceInvoiceDelivery,
   ComplianceTransactionBuyerInput,
   CreateComplianceTransactionInput,
   UpdateComplianceTransactionInput,

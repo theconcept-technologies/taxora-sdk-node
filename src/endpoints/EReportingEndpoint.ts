@@ -62,6 +62,43 @@ export type ComplianceTransactionRequestState = Exclude<ComplianceTransactionSta
 /** Tax report states accepted as filters (the tolerant `unknown` is response-only). */
 export type ComplianceTaxReportRequestState = Exclude<ComplianceTaxReportState, 'unknown'>;
 
+/**
+ * Germany only: the e-invoice format. `zugferd` (default) = Factur-X/ZUGFeRD EN 16931
+ * (PDF/A-3 with embedded XML); `xrechnung` = XRechnung 3.0 (UBL). A Leitweg-ID in
+ * `buyerReference` (public buyer) always makes it XRechnung over Peppol.
+ */
+export type ComplianceEInvoiceFormat = 'zugferd' | 'xrechnung';
+
+/**
+ * Germany only: how the e-invoice reaches the buyer. `email` (default) mails it to
+ * `counterpartyEmail`; `download` sends no mail to the buyer — fetch the file with
+ * getTransactionDocument() and pass it on yourself.
+ */
+export type ComplianceInvoiceDelivery = 'email' | 'download';
+
+/** Countries served over plain Peppol BIS 3.0 (besides Norway, which has its own input). */
+export type PeppolEInvoicingCountry = 'BE' | 'NL' | 'AT' | 'IE' | 'DK' | 'SE' | 'FI' | 'EE' | 'GB';
+
+/**
+ * The usual Peppol participant scheme per country: a bare Peppol id (without
+ * "scheme:") is read under this scheme, e.g. "0123456789" in BE = "0208:0123456789".
+ */
+export const PEPPOL_PARTICIPANT_SCHEMES: Readonly<Record<PeppolEInvoicingCountry, string>> = {
+  BE: '0208',
+  NL: '0106',
+  AT: '9914',
+  IE: '9935',
+  DK: '0184',
+  SE: '0007',
+  FI: '0216',
+  EE: '0191',
+  GB: '9932',
+};
+
+const PEPPOL_EINVOICING_COUNTRIES = Object.keys(PEPPOL_PARTICIPANT_SCHEMES) as PeppolEInvoicingCountry[];
+const E_INVOICE_FORMATS: readonly ComplianceEInvoiceFormat[] = ['zugferd', 'xrechnung'];
+const INVOICE_DELIVERIES: readonly ComplianceInvoiceDelivery[] = ['email', 'download'];
+
 const INTERVALS: readonly EReportingInterval[] = ['day', 'week', 'month'];
 const SERVICES: readonly ComplianceRequestService[] = ['e_reporting', 'e_invoicing'];
 const ENTERPRISE_SIZES: readonly ComplianceEnterpriseSize[] = ['micro', 'pme', 'eti', 'ge'];
@@ -234,6 +271,74 @@ export interface CreateNorwayEnrollmentInput {
 /** createNorwayEnrollment() input — the Norway input without the fixed `country`. */
 export type NorwayEnrollmentInput = Omit<CreateNorwayEnrollmentInput, 'country'>;
 
+/**
+ * Germany e-invoicing (ZUGFeRD / XRechnung) enrollment. B2B invoices go to the
+ * buyer by email (or are downloaded, see `delivery` on the transaction); public
+ * buyers (Leitweg-ID) are reached over Peppol.
+ */
+export interface CreateGermanyEnrollmentInput {
+  country: 'DE';
+  /** Service to book. Defaults server-side to "e_invoicing" (the only service for DE). */
+  service?: ComplianceRequestService;
+  /** Compliance regime. Defaults server-side. */
+  regime?: string;
+  /** German VAT number: "DE" + 9 digits (spaces are stripped before sending). */
+  vatNumber: string;
+  companyName: string;
+  address: string;
+  city: string;
+  postalcode: string;
+  /** Notification email for the provider account; "download" invoices are mailed here instead of to the buyer. */
+  email: string;
+  province?: string;
+  /** Optional first date transactions are recorded for (Date or strict YYYY-MM-DD). */
+  reportingStartDate?: Date | string;
+  /** When false, only the provider account is created — the registration is NOT activated. Defaults to true server-side. */
+  autoActivate?: boolean;
+}
+
+/** createGermanyEnrollment() input — the Germany input without the fixed `country`. */
+export type GermanyEnrollmentInput = Omit<CreateGermanyEnrollmentInput, 'country'>;
+
+/**
+ * Peppol BIS 3.0 e-invoicing enrollment for BE, NL, AT, IE, DK, SE, FI, EE or GB:
+ * registers the company as a Peppol participant under `peppolId`.
+ */
+export interface CreatePeppolEnrollmentInput {
+  country: PeppolEInvoicingCountry;
+  /** Service to book. Defaults server-side to "e_invoicing". */
+  service?: ComplianceRequestService;
+  /** Compliance regime. Defaults server-side ("peppol_bis3"). */
+  regime?: string;
+  /** VAT number with the country prefix (GB for the United Kingdom), e.g. "BE0123456789". Spaces are stripped. */
+  vatNumber: string;
+  /**
+   * The company's Peppol id: "scheme:value" (e.g. "0208:0123456789") or just the
+   * value under the country's usual scheme ({@link PEPPOL_PARTICIPANT_SCHEMES}). Max 60 chars.
+   */
+  peppolId: string;
+  companyName: string;
+  address: string;
+  city: string;
+  postalcode: string;
+  /** Notification email for the provider account. */
+  email: string;
+  province?: string;
+  /** Also register to RECEIVE e-invoices over Peppol. Defaults to false server-side. */
+  reception?: boolean;
+  /** Optional first date transactions are recorded for (Date or strict YYYY-MM-DD). */
+  reportingStartDate?: Date | string;
+  /** When false, only the provider account is created — the Peppol registration is NOT activated. Defaults to true server-side. */
+  autoActivate?: boolean;
+}
+
+/** Every enrollment input createEnrollment() accepts, selected by `country`. */
+export type AnyComplianceEnrollmentInput =
+  | CreateComplianceEnrollmentInput
+  | CreateNorwayEnrollmentInput
+  | CreateGermanyEnrollmentInput
+  | CreatePeppolEnrollmentInput;
+
 export interface ComplianceInvoiceTaxInput {
   /** Tax designation, e.g. "TVA". */
   name: string;
@@ -260,19 +365,38 @@ export interface ComplianceInvoiceLineInput {
  * `counterpartyRegisterId` (the buyer's organisation number) and
  * `counterpartyName` are required unless `providerContactId` is set, the
  * transaction type must be "b2b_domestic_outbound", and a credit note needs
- * `amendedNumber`. The SDK does not know the enrollment's country — those rules
- * are enforced server-side (422).
+ * `amendedNumber`. The other Peppol countries (BE, NL, AT, IE, DK, SE, FI, EE,
+ * GB) need the buyer's Peppol id in `counterpartyRegisterId` and
+ * `counterpartyName`. Germany needs `counterpartyName`, `counterpartyAddress`,
+ * `counterpartyCity`, `counterpartyPostalcode` and — unless `delivery` is
+ * "download" or `buyerReference` is a Leitweg-ID — `counterpartyEmail`. In
+ * Germany and the Peppol countries a reverse-charge (AE) line needs
+ * `counterpartyVatNumber`. The SDK does not know the enrollment's country —
+ * those rules are enforced server-side (422).
  */
 export interface ComplianceTransactionBuyerInput {
-  /** Buyer's company register id (Norway: 9-digit organisation number; "NO…MVA" is accepted). Max 30 chars. */
+  /**
+   * Buyer's company register id, max 30 chars. Norway: 9-digit organisation number
+   * ("NO…MVA" is accepted). BE/NL/AT/IE/DK/SE/FI/EE/GB: the buyer's Peppol id,
+   * "scheme:value" (e.g. "0208:0123456789") or the bare value under the buyer
+   * country's usual scheme ({@link PEPPOL_PARTICIPANT_SCHEMES}).
+   */
   counterpartyRegisterId?: string;
   counterpartyAddress?: string;
   counterpartyCity?: string;
   counterpartyPostalcode?: string;
   /** Buyer's email address. */
   counterpartyEmail?: string;
-  /** Buyer reference (Peppol BuyerReference); max 100 chars. Norway defaults it to the buyer's org number. */
+  /**
+   * Buyer reference (Peppol BuyerReference); max 100 chars. Norway and the Peppol
+   * countries default it to the buyer's register / Peppol id. Germany: a Leitweg-ID
+   * (public buyer) here makes the invoice XRechnung over Peppol.
+   */
   buyerReference?: string;
+  /** Germany only: "zugferd" (default) or "xrechnung". Ignored when `buyerReference` is a Leitweg-ID (always XRechnung). */
+  eInvoiceFormat?: ComplianceEInvoiceFormat;
+  /** Germany only: "email" (default, to `counterpartyEmail`) or "download" (no mail to the buyer; fetch the file yourself). */
+  delivery?: ComplianceInvoiceDelivery;
   /** Issue the document as a credit note. */
   isCreditNote?: boolean;
   /** Number of the invoice a credit note corrects (max 50 chars). */
@@ -361,6 +485,10 @@ export interface CreateCreditNoteInput extends ComplianceInvoicePdfFields {
   extraInfo?: string;
   /** Your own reference (order number, RMA id), max 100 chars. */
   internalReference?: string;
+  /** Germany only: the credit note's format (not stored on the original, so pass it again if it was "xrechnung"). */
+  eInvoiceFormat?: ComplianceEInvoiceFormat;
+  /** Germany only: pass "download" again when the original invoice was not mailed to the buyer. */
+  delivery?: ComplianceInvoiceDelivery;
   submitNow?: boolean;
 }
 
@@ -442,19 +570,24 @@ export class EReportingEndpoint {
    * to only create the account.
    *
    * The input shape depends on `country`: omitted/"FR" takes the France input
-   * (unchanged, backwards compatible), "NO" the Norway input — see also the
-   * createNorwayEnrollment() shortcut.
+   * (unchanged, backwards compatible), "NO" the Norway input, "DE" the Germany
+   * input and BE/NL/AT/IE/DK/SE/FI/EE/GB the Peppol input — see also the
+   * createNorwayEnrollment() and createGermanyEnrollment() shortcuts.
    *
    * Errors: 403 (HttpException, body code `service_not_active`) when the company
    * lacks the requested service; on provider failure 502 (HttpException) — the
    * enrollment is then persisted in `error_account`/`error_activation` state so
    * provisioning can be retried.
    */
-  async createEnrollment(
-    input: CreateComplianceEnrollmentInput | CreateNorwayEnrollmentInput,
-  ): Promise<ComplianceEnrollment> {
+  async createEnrollment(input: AnyComplianceEnrollmentInput): Promise<ComplianceEnrollment> {
     if (this.isNorwayEnrollmentInput(input)) {
       return this.createEnrollmentFromBody(this.buildNorwayEnrollmentBody(input));
+    }
+    if (this.isGermanyEnrollmentInput(input)) {
+      return this.createEnrollmentFromBody(this.buildGermanyEnrollmentBody(input));
+    }
+    if (this.isPeppolEnrollmentInput(input)) {
+      return this.createEnrollmentFromBody(this.buildPeppolEnrollmentBody(input));
     }
 
     this.validateEnrollmentInput(input);
@@ -489,6 +622,15 @@ export class EReportingEndpoint {
    */
   async createNorwayEnrollment(input: NorwayEnrollmentInput): Promise<ComplianceEnrollment> {
     return this.createEnrollment({ ...input, country: 'NO' });
+  }
+
+  /**
+   * Enroll the company for Germany e-invoicing (ZUGFeRD / XRechnung) — shortcut
+   * for createEnrollment({ country: 'DE', ... }). The VAT number is checked
+   * (DE + 9 digits) before sending.
+   */
+  async createGermanyEnrollment(input: GermanyEnrollmentInput): Promise<ComplianceEnrollment> {
+    return this.createEnrollment({ ...input, country: 'DE' });
   }
 
   /** Paginated list of the company's enrollments (newest first). `perPage` is capped at 100 server-side. */
@@ -766,6 +908,8 @@ export class EReportingEndpoint {
       ...(original.invoiceDate !== null ? { amendedDate: original.invoiceDate } : {}),
       ...(input.extraInfo !== undefined ? { extraInfo: input.extraInfo } : {}),
       ...(input.internalReference !== undefined ? { internalReference: input.internalReference } : {}),
+      ...(input.eInvoiceFormat !== undefined ? { eInvoiceFormat: input.eInvoiceFormat } : {}),
+      ...(input.delivery !== undefined ? { delivery: input.delivery } : {}),
       ...(input.submitNow !== undefined ? { submitNow: input.submitNow } : {}),
       ...(input.invoicePdf !== undefined ? { invoicePdf: input.invoicePdf } : {}),
       ...(input.invoicePdfFilename !== undefined ? { invoicePdfFilename: input.invoicePdfFilename } : {}),
@@ -1324,10 +1468,106 @@ export class EReportingEndpoint {
     if (input.service !== undefined) this.validateService(input.service);
   }
 
-  private isNorwayEnrollmentInput(
-    input: CreateComplianceEnrollmentInput | CreateNorwayEnrollmentInput,
-  ): input is CreateNorwayEnrollmentInput {
+  private isNorwayEnrollmentInput(input: AnyComplianceEnrollmentInput): input is CreateNorwayEnrollmentInput {
     return typeof input.country === 'string' && input.country.trim().toUpperCase() === 'NO';
+  }
+
+  private isGermanyEnrollmentInput(input: AnyComplianceEnrollmentInput): input is CreateGermanyEnrollmentInput {
+    return typeof input.country === 'string' && input.country.trim().toUpperCase() === 'DE';
+  }
+
+  private isPeppolEnrollmentInput(input: AnyComplianceEnrollmentInput): input is CreatePeppolEnrollmentInput {
+    return (
+      typeof input.country === 'string' &&
+      (PEPPOL_EINVOICING_COUNTRIES as readonly string[]).includes(input.country.trim().toUpperCase())
+    );
+  }
+
+  /** Checks the address fields every e-invoicing enrollment needs. */
+  private validateEnrollmentAddress(
+    input: { companyName: string; address: string; city: string; postalcode: string; email: string },
+    label: string,
+  ): void {
+    for (const field of ['companyName', 'address', 'city', 'postalcode'] as const) {
+      if (typeof input[field] !== 'string' || input[field].trim() === '') {
+        throw new TaxoraException(`${field} is required for a ${label} enrollment.`);
+      }
+    }
+    this.validateEmail(input.email, 'email');
+  }
+
+  /** Optional fields shared by the Germany and Peppol enrollment bodies. */
+  private applyOptionalEnrollmentFields(
+    body: Record<string, unknown>,
+    input: CreateGermanyEnrollmentInput | CreatePeppolEnrollmentInput,
+  ): void {
+    if (input.service !== undefined) body['service'] = input.service;
+    if (input.regime !== undefined) body['regime'] = input.regime;
+    if (input.province !== undefined) body['province'] = input.province;
+    if (input.reportingStartDate !== undefined) {
+      body['reporting_start_date'] = this.formatDate(input.reportingStartDate);
+    }
+    if (input.autoActivate !== undefined) body['auto_activate'] = input.autoActivate;
+  }
+
+  /** Validates the Germany input and builds its wire body (VAT number without spaces, upper-case). */
+  private buildGermanyEnrollmentBody(input: CreateGermanyEnrollmentInput): Record<string, unknown> {
+    const vatNumber = typeof input.vatNumber === 'string' ? input.vatNumber.replace(/\s+/g, '').toUpperCase() : '';
+    if (!/^DE\d{9}$/.test(vatNumber)) {
+      throw new TaxoraException('vatNumber must be a German VAT number: DE + 9 digits (e.g. DE123456789).');
+    }
+    this.validateEnrollmentAddress(input, 'Germany');
+    if (input.service !== undefined) this.validateService(input.service);
+
+    const body: Record<string, unknown> = {
+      country: 'DE',
+      vat_number: vatNumber,
+      company_name: input.companyName,
+      address: input.address,
+      city: input.city,
+      postalcode: input.postalcode,
+      email: input.email,
+    };
+    this.applyOptionalEnrollmentFields(body, input);
+
+    return body;
+  }
+
+  /** Validates the Peppol-country input and builds its wire body (country upper-case, VAT number without spaces). */
+  private buildPeppolEnrollmentBody(input: CreatePeppolEnrollmentInput): Record<string, unknown> {
+    const country = input.country.trim().toUpperCase();
+    const vatNumber = typeof input.vatNumber === 'string' ? input.vatNumber.replace(/\s+/g, '').toUpperCase() : '';
+    if (!new RegExp(`^${country}[0-9A-Z]{2,13}$`).test(vatNumber)) {
+      throw new TaxoraException(`vatNumber must be a ${country} VAT number starting with "${country}".`);
+    }
+    const peppolId = typeof input.peppolId === 'string' ? input.peppolId.trim() : '';
+    if (peppolId === '') {
+      throw new TaxoraException(
+        `peppolId is required for a Peppol enrollment ("scheme:value" or the value under scheme ${
+          PEPPOL_PARTICIPANT_SCHEMES[country as PeppolEInvoicingCountry]
+        }).`,
+      );
+    }
+    if (peppolId.length > 60) {
+      throw new TaxoraException('peppolId must not exceed 60 characters.');
+    }
+    this.validateEnrollmentAddress(input, 'Peppol');
+    if (input.service !== undefined) this.validateService(input.service);
+
+    const body: Record<string, unknown> = {
+      country,
+      vat_number: vatNumber,
+      peppol_id: peppolId,
+      company_name: input.companyName,
+      address: input.address,
+      city: input.city,
+      postalcode: input.postalcode,
+      email: input.email,
+    };
+    if (input.reception !== undefined) body['reception'] = input.reception;
+    this.applyOptionalEnrollmentFields(body, input);
+
+    return body;
   }
 
   /** Validates the Norway input and builds its wire body (org number normalized to 9 digits). */
@@ -1558,6 +1798,16 @@ export class EReportingEndpoint {
     if (input.buyerReference !== undefined && input.buyerReference.length > 100) {
       throw new TaxoraException('buyerReference must not exceed 100 characters.');
     }
+    if (input.eInvoiceFormat !== undefined && !E_INVOICE_FORMATS.includes(input.eInvoiceFormat)) {
+      throw new TaxoraException(
+        `Invalid eInvoiceFormat "${String(input.eInvoiceFormat)}". Expected one of: ${E_INVOICE_FORMATS.join(', ')}.`,
+      );
+    }
+    if (input.delivery !== undefined && !INVOICE_DELIVERIES.includes(input.delivery)) {
+      throw new TaxoraException(
+        `Invalid delivery "${String(input.delivery)}". Expected one of: ${INVOICE_DELIVERIES.join(', ')}.`,
+      );
+    }
     if (input.amendedNumber !== undefined && input.amendedNumber.length > 50) {
       throw new TaxoraException('amendedNumber must not exceed 50 characters.');
     }
@@ -1613,6 +1863,8 @@ export class EReportingEndpoint {
     if (input.counterpartyPostalcode !== undefined) body['counterparty_postalcode'] = input.counterpartyPostalcode;
     if (input.counterpartyEmail !== undefined) body['counterparty_email'] = input.counterpartyEmail;
     if (input.buyerReference !== undefined) body['buyer_reference'] = input.buyerReference;
+    if (input.eInvoiceFormat !== undefined) body['e_invoice_format'] = input.eInvoiceFormat;
+    if (input.delivery !== undefined) body['delivery'] = input.delivery;
     if (input.isCreditNote !== undefined) body['is_credit_note'] = input.isCreditNote;
     if (input.amendedNumber !== undefined) body['amended_number'] = input.amendedNumber;
     if (input.amendedDate !== undefined) body['amended_date'] = this.formatDate(input.amendedDate);

@@ -540,7 +540,8 @@ account — except `requestEReportingAccess()`, which is how you ask for one.
 
 **Per-country services:** each enrollment books one service for one country — `e_reporting`
 (France, regime `dgfip_flux10`) or `e_invoicing` (Norway EHF / Peppol BIS 3.0, regime
-`peppol_bis3`, see [below](#-e-invoicing-norway-ehf--peppol)). Every country is unlocked and
+`peppol_bis3`, see [below](#-e-invoicing-norway-ehf--peppol); Germany ZUGFeRD / XRechnung; BE, NL, AT, IE, DK, SE, FI,
+EE and GB over Peppol BIS 3.0). Every country is unlocked and
 billed separately (one-off setup fee + per document). Enrolling for a service your company does not
 have yields a 403 `HttpException` whose body carries `code: "service_not_active"`.
 
@@ -968,6 +969,102 @@ if (tx.pdfUrl !== null) {
   const pdf = await client.eReporting.getTransactionPdf(tx.id); // 409 while no PDF is available
   writeFileSync(pdf.filename ?? `${tx.invoiceNumber}.pdf`, pdf.content); // pdf.contentType: application/pdf
 }
+```
+
+### 🇩🇪 E-Invoicing Germany (ZUGFeRD / XRechnung)
+
+EN 16931 e-invoices for buyers in Germany. B2B invoices are sent by email as ZUGFeRD (Factur-X, PDF/A-3 with
+embedded XML, the default) or XRechnung; public buyers (B2G) are reached over Peppol via their Leitweg-ID. Ask for it
+via `requestEReportingAccess({ service: 'e_invoicing', countries: ['DE'] })`.
+
+**1. Enrollment** — the VAT number is checked (`DE` + 9 digits) before sending:
+
+```ts
+const deEnrollment = await client.eReporting.createGermanyEnrollment({
+  vatNumber: 'DE123456789',
+  companyName: 'Acme GmbH',
+  address: 'Hauptstraße 1',
+  city: 'Berlin',
+  postalcode: '10115',
+  email: 'rechnung@acme.de', // "download" invoices are mailed here instead of to the buyer
+});
+// Equivalent: client.eReporting.createEnrollment({ country: 'DE', ... })
+```
+
+**2. Send an invoice** — Germany requires `counterpartyName`, `counterpartyAddress`, `counterpartyCity`,
+`counterpartyPostalcode` and `counterpartyEmail` (the e-invoice is mailed there). `delivery: 'download'` sends no
+mail to the buyer: fetch the file with `getTransactionDocument()` and pass it on yourself (then no email is needed).
+A Leitweg-ID in `buyerReference` makes it XRechnung over Peppol (no email needed either). Reverse-charge (`AE`)
+lines need `counterpartyVatNumber`. All of this is enforced server-side (422):
+
+```ts
+const deInvoice = await client.eReporting.createTransaction({
+  complianceEnrollmentId: deEnrollment.id,
+  transactionType: 'b2b_domestic_outbound',
+  invoiceNumber: 'DE-2026-0001',
+  invoiceDate: '2026-11-12',
+  subtotal: 1000,
+  taxAmount: 190,
+  total: 1190,
+  counterpartyName: 'Beispiel GmbH',
+  counterpartyCountry: 'DE',
+  counterpartyAddress: 'Musterweg 5',
+  counterpartyCity: 'München',
+  counterpartyPostalcode: '80331',
+  counterpartyEmail: 'buchhaltung@beispiel.de',
+  eInvoiceFormat: 'zugferd', // optional: 'zugferd' (default) | 'xrechnung'
+  delivery: 'email', // optional: 'email' (default) | 'download'
+  invoiceLines: [{ description: 'Beratung', quantity: 1, price: 1000, taxes: [ComplianceTax.rate(19, 'USt')] }],
+});
+
+// Public buyer (deInvoiceInput = the input above): the Leitweg-ID forces XRechnung over Peppol
+await client.eReporting.createTransaction({ ...deInvoiceInput, buyerReference: '04011000-1234512345-06' });
+```
+
+Credit notes work as in Norway (`isCreditNote` + `amendedNumber`, or `createCreditNote()`); with
+`createCreditNote()` pass `eInvoiceFormat` / `delivery` again when the original used `xrechnung` / `download`.
+
+### 🇪🇺 E-Invoicing over Peppol (BE, NL, AT, IE, DK, SE, FI, EE, GB)
+
+Peppol BIS 3.0 e-invoices for Belgium, the Netherlands, Austria, Ireland, Denmark, Sweden, Finland, Estonia and the
+United Kingdom. Companies and buyers are addressed by their Peppol id: `"scheme:value"` (e.g. `0208:0123456789`) or
+just the value under the country's usual scheme (`PEPPOL_PARTICIPANT_SCHEMES`: BE 0208, NL 0106, AT 9914, IE 9935,
+DK 0184, SE 0007, FI 0216, EE 0191, GB 9932).
+
+**1. Enrollment** — the VAT number must carry the country prefix (`GB` for the United Kingdom):
+
+```ts
+const beEnrollment = await client.eReporting.createEnrollment({
+  country: 'BE',
+  vatNumber: 'BE0123456789',
+  peppolId: '0208:0123456789', // or '0123456789' (scheme 0208 in BE)
+  companyName: 'Acme BV',
+  address: 'Rue de la Loi 1',
+  city: 'Brussels',
+  postalcode: '1000',
+  email: 'invoice@acme.be',
+  reception: false, // optional: also receive e-invoices over Peppol
+});
+```
+
+**2. Send an invoice** — the buyer's Peppol id goes into `counterpartyRegisterId`, and `counterpartyName` is required;
+`buyerReference` defaults to the buyer's Peppol id. Reverse-charge (`AE`) lines need `counterpartyVatNumber`:
+
+```ts
+await client.eReporting.createTransaction({
+  complianceEnrollmentId: beEnrollment.id,
+  transactionType: 'b2b_domestic_outbound',
+  invoiceNumber: 'BE-2026-0001',
+  invoiceDate: '2026-11-12',
+  subtotal: 1000,
+  taxAmount: 210,
+  total: 1210,
+  counterpartyName: 'Buyer NV',
+  counterpartyCountry: 'BE',
+  counterpartyRegisterId: '0208:0987654321', // or '0987654321'
+  counterpartyVatNumber: 'BE0987654321',
+  invoiceLines: [{ description: 'Consulting', quantity: 1, price: 1000, taxes: [ComplianceTax.rate(21)] }],
+});
 ```
 
 ### Self-service plans (Stripe)

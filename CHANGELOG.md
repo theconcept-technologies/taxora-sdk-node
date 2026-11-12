@@ -4,6 +4,22 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-11-12
+
+### Added
+
+- **Germany e-invoicing (ZUGFeRD / XRechnung):** `eReporting.createGermanyEnrollment(input)` (or
+  `createEnrollment({ country: 'DE', ... })`, type `CreateGermanyEnrollmentInput`) with `vatNumber` (DE + 9 digits,
+  checked before the request), `companyName`, `address`, `city`, `postalcode` and `email`.
+- **Peppol e-invoicing for BE, NL, AT, IE, DK, SE, FI, EE and GB:** `createEnrollment({ country: 'BE', ... })`
+  (type `CreatePeppolEnrollmentInput`, `PeppolEInvoicingCountry`) with `vatNumber` (country prefix), `peppolId`
+  (`"scheme:value"` or the bare value under the country's usual scheme) and the optional `reception`.
+  `PEPPOL_PARTICIPANT_SCHEMES` lists the usual scheme per country.
+- **Transaction fields for Germany:** `eInvoiceFormat` (`'zugferd'` default | `'xrechnung'`,
+  `ComplianceEInvoiceFormat`) and `delivery` (`'email'` default | `'download'`, `ComplianceInvoiceDelivery`) on
+  `createTransaction()`, `updateTransaction()` and `createCreditNote()`; unknown values are refused before the request.
+  For the Peppol countries the buyer's Peppol id goes into the existing `counterpartyRegisterId`.
+
 ## [1.10.0] - 2026-11-03
 
 ### Added

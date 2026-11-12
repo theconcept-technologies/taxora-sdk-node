@@ -6,6 +6,11 @@ import {
   type CreateComplianceEnrollmentInput,
   type CreateComplianceTransactionInput,
   type NorwayEnrollmentInput,
+  type GermanyEnrollmentInput,
+  type CreatePeppolEnrollmentInput,
+  type ComplianceEInvoiceFormat,
+  type ComplianceInvoiceDelivery,
+  PEPPOL_PARTICIPANT_SCHEMES,
   type ComplianceRequestService,
   type EReportingInterval,
 } from '../../src/endpoints/EReportingEndpoint.js';
@@ -1758,6 +1763,283 @@ describe('EReportingEndpoint Norway transactions', () => {
       'country must be a 2-character ISO 3166-1 alpha-2 code.',
     );
     expect(client.requests).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Germany (ZUGFeRD / XRechnung) and Peppol countries (BE, NL, AT, IE, DK, SE, FI, EE, GB)
+// ---------------------------------------------------------------------------
+
+function validGermanyEnrollmentInput(): GermanyEnrollmentInput {
+  return {
+    vatNumber: 'de 123 456 789',
+    companyName: 'Acme GmbH',
+    address: 'Hauptstraße 1',
+    city: 'Berlin',
+    postalcode: '10115',
+    email: 'rechnung@acme.de',
+  };
+}
+
+function validPeppolEnrollmentInput(): CreatePeppolEnrollmentInput {
+  return {
+    country: 'BE',
+    vatNumber: 'BE 0123456789',
+    peppolId: '0208:0123456789',
+    companyName: 'Acme BV',
+    address: 'Rue de la Loi 1',
+    city: 'Brussels',
+    postalcode: '1000',
+    email: 'invoice@acme.be',
+  };
+}
+
+function germanyTransactionInput(): CreateComplianceTransactionInput {
+  return {
+    complianceEnrollmentId: 21,
+    transactionType: 'b2b_domestic_outbound',
+    invoiceNumber: 'DE-2026-0001',
+    invoiceDate: '2026-11-12',
+    subtotal: 1000,
+    taxAmount: 190,
+    total: 1190,
+    counterpartyName: 'Beispiel GmbH',
+    counterpartyCountry: 'DE',
+    counterpartyAddress: 'Musterweg 5',
+    counterpartyCity: 'München',
+    counterpartyPostalcode: '80331',
+    invoiceLines: [
+      { description: 'Beratung', quantity: 1, price: 1000, taxes: [{ name: 'USt', percent: 19, category: 'S' }] },
+    ],
+  };
+}
+
+describe('EReportingEndpoint Germany and Peppol enrollments', () => {
+  it('createGermanyEnrollment POSTs the Germany body with the VAT number compacted', async () => {
+    const { endpoint, client } = makeEndpoint([envelope({ ...ENROLLMENT_PAYLOAD, country: 'de' }, 201)]);
+
+    const enrollment = await endpoint.createGermanyEnrollment({
+      ...validGermanyEnrollmentInput(),
+      service: 'e_invoicing',
+      province: 'Berlin',
+      reportingStartDate: new Date('2026-12-01T00:00:00'),
+      autoActivate: false,
+    });
+
+    expect(client.requests[0]!.url).toBe(`${BASE_URL}/compliance/enrollments`);
+    expect(JSON.parse(client.requests[0]!.options?.body as string)).toEqual({
+      country: 'DE',
+      vat_number: 'DE123456789',
+      company_name: 'Acme GmbH',
+      address: 'Hauptstraße 1',
+      city: 'Berlin',
+      postalcode: '10115',
+      email: 'rechnung@acme.de',
+      service: 'e_invoicing',
+      province: 'Berlin',
+      reporting_start_date: '2026-12-01',
+      auto_activate: false,
+    });
+    expect(enrollment).toBeInstanceOf(ComplianceEnrollment);
+  });
+
+  it('createEnrollment routes "de" to the Germany body without France fields', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(ENROLLMENT_PAYLOAD, 201)]);
+
+    await endpoint.createEnrollment({ ...validGermanyEnrollmentInput(), country: 'de' as 'DE' });
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    expect(body.country).toBe('DE');
+    expect(body).not.toHaveProperty('naf_code');
+    expect(body).not.toHaveProperty('peppol_id');
+  });
+
+  it('rejects an invalid German VAT number and missing fields before sending', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(
+      endpoint.createGermanyEnrollment({ ...validGermanyEnrollmentInput(), vatNumber: 'DE12345678' }),
+    ).rejects.toThrow('vatNumber must be a German VAT number: DE + 9 digits (e.g. DE123456789).');
+    await expect(
+      endpoint.createGermanyEnrollment({ ...validGermanyEnrollmentInput(), vatNumber: 'AT123456789' }),
+    ).rejects.toThrow(TaxoraException);
+    await expect(
+      endpoint.createGermanyEnrollment({ ...validGermanyEnrollmentInput(), postalcode: ' ' }),
+    ).rejects.toThrow('postalcode is required for a Germany enrollment.');
+    await expect(endpoint.createGermanyEnrollment({ ...validGermanyEnrollmentInput(), email: 'nope' })).rejects.toThrow(
+      'email must be a valid email address.',
+    );
+    expect(client.requests).toHaveLength(0);
+  });
+
+  it('createEnrollment POSTs the Peppol body for a Peppol country', async () => {
+    const { endpoint, client } = makeEndpoint([envelope({ ...ENROLLMENT_PAYLOAD, country: 'be' }, 201)]);
+
+    await endpoint.createEnrollment({ ...validPeppolEnrollmentInput(), reception: true, regime: 'peppol_bis3' });
+
+    expect(JSON.parse(client.requests[0]!.options?.body as string)).toEqual({
+      country: 'BE',
+      vat_number: 'BE0123456789',
+      peppol_id: '0208:0123456789',
+      company_name: 'Acme BV',
+      address: 'Rue de la Loi 1',
+      city: 'Brussels',
+      postalcode: '1000',
+      email: 'invoice@acme.be',
+      reception: true,
+      regime: 'peppol_bis3',
+    });
+  });
+
+  it('accepts a bare Peppol id and a GB VAT number', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(ENROLLMENT_PAYLOAD, 201)]);
+
+    await endpoint.createEnrollment({
+      ...validPeppolEnrollmentInput(),
+      country: 'GB',
+      vatNumber: 'GB123456789',
+      peppolId: '123456789',
+    });
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    expect(body.country).toBe('GB');
+    expect(body.peppol_id).toBe('123456789');
+    expect(PEPPOL_PARTICIPANT_SCHEMES.GB).toBe('9932');
+  });
+
+  it('rejects a foreign VAT number, a missing or too long Peppol id before sending', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(
+      endpoint.createEnrollment({ ...validPeppolEnrollmentInput(), country: 'NL', vatNumber: 'BE0123456789' }),
+    ).rejects.toThrow('vatNumber must be a NL VAT number starting with "NL".');
+    await expect(endpoint.createEnrollment({ ...validPeppolEnrollmentInput(), peppolId: ' ' })).rejects.toThrow(
+      'peppolId is required for a Peppol enrollment ("scheme:value" or the value under scheme 0208).',
+    );
+    await expect(
+      endpoint.createEnrollment({ ...validPeppolEnrollmentInput(), peppolId: 'x'.repeat(61) }),
+    ).rejects.toThrow('peppolId must not exceed 60 characters.');
+    await expect(endpoint.createEnrollment({ ...validPeppolEnrollmentInput(), city: '' })).rejects.toThrow(
+      'city is required for a Peppol enrollment.',
+    );
+    expect(client.requests).toHaveLength(0);
+  });
+});
+
+describe('EReportingEndpoint Germany and Peppol transactions', () => {
+  it('POSTs eInvoiceFormat and delivery for Germany', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(TRANSACTION_PAYLOAD, 201)]);
+
+    await endpoint.createTransaction({
+      ...germanyTransactionInput(),
+      eInvoiceFormat: 'xrechnung',
+      delivery: 'download',
+      buyerReference: '04011000-1234512345-06',
+    });
+
+    expect(JSON.parse(client.requests[0]!.options?.body as string)).toMatchObject({
+      counterparty_name: 'Beispiel GmbH',
+      counterparty_country: 'DE',
+      counterparty_address: 'Musterweg 5',
+      counterparty_city: 'München',
+      counterparty_postalcode: '80331',
+      buyer_reference: '04011000-1234512345-06',
+      e_invoice_format: 'xrechnung',
+      delivery: 'download',
+    });
+  });
+
+  it('omits eInvoiceFormat and delivery when unset and PUTs them on update', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(TRANSACTION_PAYLOAD, 201), envelope(TRANSACTION_PAYLOAD)]);
+
+    await endpoint.createTransaction({ ...germanyTransactionInput(), counterpartyEmail: 'ap@beispiel.de' });
+    await endpoint.updateTransaction(100, { eInvoiceFormat: 'zugferd', delivery: 'email' });
+
+    const created = JSON.parse(client.requests[0]!.options?.body as string);
+    expect(created).not.toHaveProperty('e_invoice_format');
+    expect(created).not.toHaveProperty('delivery');
+    expect(JSON.parse(client.requests[1]!.options?.body as string)).toEqual({
+      e_invoice_format: 'zugferd',
+      delivery: 'email',
+    });
+  });
+
+  it('rejects an unknown eInvoiceFormat or delivery without a request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(
+      endpoint.createTransaction({
+        ...germanyTransactionInput(),
+        eInvoiceFormat: 'pdf' as ComplianceEInvoiceFormat,
+      }),
+    ).rejects.toThrow('Invalid eInvoiceFormat "pdf". Expected one of: zugferd, xrechnung.');
+    await expect(endpoint.updateTransaction(100, { delivery: 'post' as ComplianceInvoiceDelivery })).rejects.toThrow(
+      'Invalid delivery "post". Expected one of: email, download.',
+    );
+    expect(client.requests).toHaveLength(0);
+  });
+
+  it('sends the buyer Peppol id as counterparty_register_id for a Peppol country', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(TRANSACTION_PAYLOAD, 201)]);
+
+    await endpoint.createTransaction({
+      ...germanyTransactionInput(),
+      complianceEnrollmentId: 22,
+      invoiceNumber: 'BE-2026-0001',
+      subtotal: 1000,
+      taxAmount: 0,
+      total: 1000,
+      counterpartyName: 'Buyer NV',
+      counterpartyCountry: 'BE',
+      counterpartyVatNumber: 'BE0987654321',
+      counterpartyRegisterId: '0208:0987654321',
+      invoiceLines: [
+        { description: 'Service', quantity: 1, price: 1000, taxes: [{ name: 'VAT', percent: 0, category: 'AE' }] },
+      ],
+    });
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    expect(body.counterparty_register_id).toBe('0208:0987654321');
+    expect(body.counterparty_vat_number).toBe('BE0987654321');
+  });
+
+  it('surfaces the backend Germany rules (422) as ValidationException', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse(
+        {
+          message: 'The buyer email is required to send the e-invoice.',
+          errors: { counterparty_email: ['The buyer email is required to send the e-invoice.'] },
+        },
+        422,
+      ),
+    ]);
+
+    const error = await endpoint.createTransaction(germanyTransactionInput()).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ValidationException);
+    expect((error as ValidationException).getErrors()).toHaveProperty('counterparty_email');
+  });
+
+  it('createCreditNote passes eInvoiceFormat and delivery through', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(NORWAY_TRANSACTION_PAYLOAD, 201)]);
+    const original = ComplianceTransaction.fromArray({
+      ...NORWAY_TRANSACTION_PAYLOAD,
+      state: 'submitted',
+      document_type: 'invoice',
+      invoice_number: 'DE-2026-0001',
+      amended_number: null,
+      amended_date: null,
+    });
+
+    await endpoint.createCreditNote(original, {
+      creditNoteNumber: 'DE-CN-1',
+      invoiceDate: '2026-11-20',
+      eInvoiceFormat: 'xrechnung',
+      delivery: 'download',
+    });
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    expect(body.e_invoice_format).toBe('xrechnung');
+    expect(body.delivery).toBe('download');
   });
 });
 
