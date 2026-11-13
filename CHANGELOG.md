@@ -4,6 +4,8 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-11-13
+
 ### Added
 
 - **Germany, XRechnung seller contact:** `createGermanyEnrollment()` takes `contactPerson` and `phone`. They are the
