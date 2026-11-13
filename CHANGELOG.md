@@ -4,6 +4,15 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ## [Unreleased]
 
+### Added
+
+- **France enrollment, VAT regime:** `createEnrollment()` takes `vatRegime` (`ComplianceVatRegime`,
+  `COMPLIANCE_VAT_REGIMES`: `reel_normal_mensuel`, `reel_normal_trimestriel`, `simplifie`, `franchise_en_base`).
+  The API now requires it for France and answers 422 without it. Most foreign companies with a French VAT number file
+  monthly: `reel_normal_mensuel`.
+- **France enrollment, switching platform:** `migrationCode` for a company already registered with another approved
+  platform (PA). Pass the one-time code that platform issued; it is used once and never returned.
+
 ## [1.11.0] - 2026-11-12
 
 ### Added

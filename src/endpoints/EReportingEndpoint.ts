@@ -50,6 +50,23 @@ export type ComplianceEnterpriseSize = 'micro' | 'pme' | 'eti' | 'ge';
 /** Type of operations the enrolled company performs. */
 export type ComplianceTypeOperation = 'services' | 'goods' | 'mixed';
 
+/**
+ * French VAT regime (régime d'imposition TVA). It sets how often e-reporting data goes to the tax office:
+ * - `reel_normal_mensuel`: monthly VAT return (CA3) — almost every foreign company with a French VAT number
+ * - `reel_normal_trimestriel`: quarterly CA3 (only with less than €4,000 VAT a year)
+ * - `simplifie`: yearly return (CA12); abolished on 2027-01-01
+ * - `franchise_en_base`: small business, no French VAT charged
+ */
+export type ComplianceVatRegime = 'reel_normal_mensuel' | 'reel_normal_trimestriel' | 'simplifie' | 'franchise_en_base';
+
+/** Every accepted {@link ComplianceVatRegime}. */
+export const COMPLIANCE_VAT_REGIMES: readonly ComplianceVatRegime[] = [
+  'reel_normal_mensuel',
+  'reel_normal_trimestriel',
+  'simplifie',
+  'franchise_en_base',
+];
+
 /** Services accepted on the request side (the tolerant `unknown` is response-only). */
 export type ComplianceRequestService = Exclude<ComplianceService, 'unknown'>;
 
@@ -224,10 +241,20 @@ export interface CreateComplianceEnrollmentInput {
   nafCode: string;
   enterpriseSize: ComplianceEnterpriseSize;
   typeOperation: ComplianceTypeOperation;
+  /**
+   * The company's French VAT regime. The API requires it (422 without); it is optional in the type only so
+   * existing code keeps compiling. Most foreign companies with a French VAT number: `reel_normal_mensuel`.
+   */
+  vatRegime?: ComplianceVatRegime;
   /** First date transactions are reported for (Date or strict YYYY-MM-DD). */
   reportingStartDate: Date | string;
   /** When false, only the provider account is created — the DGFiP regime is NOT activated. Defaults to true server-side. */
   autoActivate?: boolean;
+  /**
+   * Only when the company is already registered with another approved platform (PA): the one-time migration
+   * code that platform issued. Used once at activation and never returned by the API.
+   */
+  migrationCode?: string;
 }
 
 /**
@@ -610,7 +637,12 @@ export class EReportingEndpoint {
     if (input.city !== undefined) body['city'] = input.city;
     if (input.postalcode !== undefined) body['postalcode'] = input.postalcode;
     if (input.province !== undefined) body['province'] = input.province;
+    if (input.vatRegime !== undefined) body['vat_regime'] = input.vatRegime;
     if (input.autoActivate !== undefined) body['auto_activate'] = input.autoActivate;
+    if (input.migrationCode !== undefined) {
+      body['migrating'] = true;
+      body['migration_code'] = input.migrationCode.trim();
+    }
 
     return this.createEnrollmentFromBody(body);
   }
@@ -1460,6 +1492,16 @@ export class EReportingEndpoint {
     if (!TYPE_OPERATIONS.includes(input.typeOperation)) {
       throw new TaxoraException(
         `Invalid typeOperation "${String(input.typeOperation)}". Expected one of: ${TYPE_OPERATIONS.join(', ')}.`,
+      );
+    }
+    if (input.vatRegime !== undefined && !COMPLIANCE_VAT_REGIMES.includes(input.vatRegime)) {
+      throw new TaxoraException(
+        `Invalid vatRegime "${String(input.vatRegime)}". Expected one of: ${COMPLIANCE_VAT_REGIMES.join(', ')}.`,
+      );
+    }
+    if (input.migrationCode !== undefined && input.migrationCode.trim() === '') {
+      throw new TaxoraException(
+        'migrationCode must not be empty; leave it out when the company is not switching from another platform.',
       );
     }
     if (input.country !== undefined && input.country.length !== 2) {

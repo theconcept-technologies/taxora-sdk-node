@@ -16,12 +16,17 @@ export type {
   SmartEnrichmentStatisticsOptions,
   SmartEnrichmentWaitOptions,
 } from './endpoints/SmartEnrichmentEndpoint.js';
-export { EReportingEndpoint, PEPPOL_PARTICIPANT_SCHEMES } from './endpoints/EReportingEndpoint.js';
+export {
+  EReportingEndpoint,
+  PEPPOL_PARTICIPANT_SCHEMES,
+  COMPLIANCE_VAT_REGIMES,
+} from './endpoints/EReportingEndpoint.js';
 export type {
   RevenueStatisticsFilters,
   EReportingInterval,
   ComplianceEnterpriseSize,
   ComplianceTypeOperation,
+  ComplianceVatRegime,
   ComplianceTransactionRequestType,
   ComplianceTransactionRequestState,
   ComplianceTaxReportRequestState,

@@ -265,6 +265,33 @@ describe('EReportingEndpoint.getRevenueStatistics', () => {
 });
 
 describe('EReportingEndpoint.createEnrollment', () => {
+  it('sends vat_regime and, with a migration code, migrating + the trimmed code', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(ENROLLMENT_PAYLOAD, 201)]);
+
+    await endpoint.createEnrollment({
+      ...validEnrollmentInput(),
+      vatRegime: 'reel_normal_trimestriel',
+      migrationCode: '  MIG-123  ',
+    });
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    expect(body.vat_regime).toBe('reel_normal_trimestriel');
+    expect(body.migrating).toBe(true);
+    expect(body.migration_code).toBe('MIG-123');
+  });
+
+  it('rejects an unknown vatRegime and an empty migrationCode before any request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(
+      endpoint.createEnrollment({ ...validEnrollmentInput(), vatRegime: 'monthly' as never }),
+    ).rejects.toThrow(/vatRegime/);
+    await expect(endpoint.createEnrollment({ ...validEnrollmentInput(), migrationCode: '   ' })).rejects.toThrow(
+      /migrationCode/,
+    );
+    expect(client.requests).toHaveLength(0);
+  });
+
   it('POSTs the snake_case body and returns a ComplianceEnrollment on 201', async () => {
     const { endpoint, client } = makeEndpoint([envelope(ENROLLMENT_PAYLOAD, 201)]);
 

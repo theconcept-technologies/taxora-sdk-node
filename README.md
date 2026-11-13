@@ -591,8 +591,10 @@ const enrollment = await client.eReporting.createEnrollment({
   nafCode: company.nafCode!, // 2-digit NAF division, e.g. "47"
   enterpriseSize: 'pme', // 'micro' | 'pme' | 'eti' | 'ge'
   typeOperation: 'mixed', // 'services' | 'goods' | 'mixed'
+  vatRegime: 'reel_normal_mensuel', // required by the API — see COMPLIANCE_VAT_REGIMES
   reportingStartDate: '2026-09-01', // or a Date
   autoActivate: true, // optional — false creates the account without regime activation
+  // migrationCode: 'ABC-123', // only when switching from another approved platform (PA)
 });
 
 console.log(enrollment.id, enrollment.status, enrollment.statusLabel);
