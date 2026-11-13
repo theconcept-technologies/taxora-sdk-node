@@ -1842,6 +1842,33 @@ function germanyTransactionInput(): CreateComplianceTransactionInput {
 }
 
 describe('EReportingEndpoint Germany and Peppol enrollments', () => {
+  it('createGermanyEnrollment sends the seller contact and the compacted IBAN', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(ENROLLMENT_PAYLOAD, 201)]);
+
+    await endpoint.createGermanyEnrollment({
+      ...validGermanyEnrollmentInput(),
+      contactPerson: ' Erika Muster ',
+      phone: '+49 30 123456',
+      iban: 'de89 3704 0044 0532 0130 00',
+      bic: 'cobadeffxxx',
+    });
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    expect(body.contact_person).toBe('Erika Muster');
+    expect(body.phone).toBe('+49 30 123456');
+    expect(body.iban).toBe('DE89370400440532013000');
+    expect(body.bic).toBe('COBADEFFXXX');
+  });
+
+  it('createGermanyEnrollment rejects an invalid IBAN before any request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(
+      endpoint.createGermanyEnrollment({ ...validGermanyEnrollmentInput(), iban: 'not-an-iban' }),
+    ).rejects.toThrow(/iban/);
+    expect(client.requests).toHaveLength(0);
+  });
+
   it('createGermanyEnrollment POSTs the Germany body with the VAT number compacted', async () => {
     const { endpoint, client } = makeEndpoint([envelope({ ...ENROLLMENT_PAYLOAD, country: 'de' }, 201)]);
 

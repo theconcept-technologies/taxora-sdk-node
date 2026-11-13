@@ -322,6 +322,20 @@ export interface CreateGermanyEnrollmentInput {
   reportingStartDate?: Date | string;
   /** When false, only the provider account is created — the registration is NOT activated. Defaults to true server-side. */
   autoActivate?: boolean;
+  /**
+   * Seller contact person printed on every XRechnung (BT-41). The API requires it for Germany (422 without); optional
+   * in the type only so existing code keeps compiling.
+   */
+  contactPerson?: string;
+  /** Seller contact phone printed on every XRechnung (BT-42). Required by the API, like `contactPerson`. */
+  phone?: string;
+  /**
+   * Optional seller IBAN: German invoices without their own payment method then go out as SEPA credit transfer (58) to
+   * this account. Without it, an XRechnung needs a payment method on each invoice.
+   */
+  iban?: string;
+  /** Optional BIC for the IBAN. */
+  bic?: string;
 }
 
 /** createGermanyEnrollment() input — the Germany input without the fixed `country`. */
@@ -1571,6 +1585,19 @@ export class EReportingEndpoint {
       email: input.email,
     };
     this.applyOptionalEnrollmentFields(body, input);
+
+    const contactPerson = input.contactPerson?.trim();
+    if (contactPerson) body['contact_person'] = contactPerson;
+    const phone = input.phone?.trim();
+    if (phone) body['phone'] = phone;
+    if (input.iban !== undefined && input.iban.trim() !== '') {
+      const iban = input.iban.replace(/\s+/g, '').toUpperCase();
+      if (!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban)) {
+        throw new TaxoraException('iban must be a valid IBAN, e.g. DE89370400440532013000.');
+      }
+      body['iban'] = iban;
+    }
+    if (input.bic !== undefined && input.bic.trim() !== '') body['bic'] = input.bic.replace(/\s+/g, '').toUpperCase();
 
     return body;
   }

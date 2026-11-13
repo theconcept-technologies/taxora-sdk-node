@@ -4,6 +4,14 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ## [Unreleased]
 
+### Added
+
+- **Germany, XRechnung seller contact:** `createGermanyEnrollment()` takes `contactPerson` and `phone`. They are the
+  seller contact printed on every XRechnung (BT-41/42), which is always used for public buyers. **The API now requires
+  both for Germany** and answers 422 without them.
+- **Germany, SEPA by default:** an optional `iban` (+ `bic`). German invoices without their own payment method then go
+  out as SEPA credit transfer (58) to that account. Without it, an XRechnung needs `paymentMethod` on each invoice.
+
 ## [1.12.0] - 2026-11-13
 
 ### Added
