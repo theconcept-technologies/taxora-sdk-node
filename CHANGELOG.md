@@ -11,6 +11,12 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
   both for Germany** and answers 422 without them.
 - **Germany, SEPA by default:** an optional `iban` (+ `bic`). German invoices without their own payment method then go
   out as SEPA credit transfer (58) to that account. Without it, an XRechnung needs `paymentMethod` on each invoice.
+- **Payment means by name:** `paymentMethod` on `createTransaction()` / `updateTransaction()` takes
+  `ComplianceInvoicePaymentMeans` (`PaymentMeans.SEPA_CREDIT_TRANSFER`, `CREDIT_TRANSFER`, `SEPA_DIRECT_DEBIT`,
+  `DIRECT_DEBIT`, `CREDIT_CARD`, `DEBIT_CARD`, `ONLINE_PAYMENT`, `CASH`, `CHEQUE`, `OTHER`;
+  `COMPLIANCE_PAYMENT_MEANS`). `ONLINE_PAYMENT` (PayPal, Klarna, …) and `OTHER` need `paymentMethodText`. Numeric
+  provider ids still work. Unknown values are refused before the request.
+- **Already paid:** `paidAmount` for orders paid at checkout. The e-invoice shows it as prepaid and nothing as due.
 
 ## [1.12.0] - 2026-11-13
 

@@ -20,6 +20,8 @@ export {
   EReportingEndpoint,
   PEPPOL_PARTICIPANT_SCHEMES,
   COMPLIANCE_VAT_REGIMES,
+  COMPLIANCE_PAYMENT_MEANS,
+  PaymentMeans,
 } from './endpoints/EReportingEndpoint.js';
 export type {
   RevenueStatisticsFilters,
@@ -27,6 +29,7 @@ export type {
   ComplianceEnterpriseSize,
   ComplianceTypeOperation,
   ComplianceVatRegime,
+  ComplianceInvoicePaymentMeans,
   ComplianceTransactionRequestType,
   ComplianceTransactionRequestState,
   ComplianceTaxReportRequestState,

@@ -14,6 +14,7 @@ import {
   type ComplianceRequestService,
   type EReportingInterval,
 } from '../../src/endpoints/EReportingEndpoint.js';
+import { PaymentMeans } from '../../src/endpoints/EReportingEndpoint.js';
 import { InMemoryTokenStorage } from '../../src/http/InMemoryTokenStorage.js';
 import { RetryPolicy } from '../../src/http/RetryPolicy.js';
 import { Token } from '../../src/dto/Token.js';
@@ -586,6 +587,37 @@ describe('EReportingEndpoint.sireneLookup', () => {
 });
 
 describe('EReportingEndpoint.createTransaction', () => {
+  it('sends payment means by name and the already paid amount', async () => {
+    const { endpoint, client } = makeEndpoint([envelope(TRANSACTION_PAYLOAD, 201)]);
+    const input = validTransactionInput();
+
+    await endpoint.createTransaction({
+      ...input,
+      paymentMethod: PaymentMeans.ONLINE_PAYMENT,
+      paymentMethodText: 'PayPal',
+      paidAmount: input.total,
+    });
+
+    const body = JSON.parse(client.requests[0]!.options?.body as string);
+    expect(body.payment_method).toBe('online_payment');
+    expect(body.payment_method_text).toBe('PayPal');
+    expect(body.paid_amount).toBe(input.total);
+  });
+
+  it('refuses unknown payment means, a missing service name and overpayment before any request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+    const input = validTransactionInput();
+
+    await expect(endpoint.createTransaction({ ...input, paymentMethod: 'paypal' as never })).rejects.toThrow(
+      /paymentMethod/,
+    );
+    await expect(endpoint.createTransaction({ ...input, paymentMethod: PaymentMeans.OTHER })).rejects.toThrow(
+      /paymentMethodText/,
+    );
+    await expect(endpoint.createTransaction({ ...input, paidAmount: input.total + 1 })).rejects.toThrow(/paidAmount/);
+    expect(client.requests).toHaveLength(0);
+  });
+
   it('POSTs the snake_case body with nested invoice_lines_attributes/taxes_attributes and returns the DTO on 201', async () => {
     const { endpoint, client } = makeEndpoint([envelope(TRANSACTION_PAYLOAD, 201)]);
 

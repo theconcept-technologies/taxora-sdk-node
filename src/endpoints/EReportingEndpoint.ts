@@ -93,6 +93,40 @@ export type ComplianceEInvoiceFormat = 'zugferd' | 'xrechnung';
  */
 export type ComplianceInvoiceDelivery = 'email' | 'download';
 
+/**
+ * How an invoice is (or was) paid — the `paymentMethod` transaction field; it becomes the payment means code (EN 16931
+ * BT-81) in the e-invoice. `online_payment` (PayPal, Klarna, Stripe, …) and `other` need `paymentMethodText`.
+ * `credit_card` / `debit_card` are refused for a German XRechnung (card details needed) — use `online_payment` there.
+ */
+export type ComplianceInvoicePaymentMeans =
+  | 'sepa_credit_transfer'
+  | 'credit_transfer'
+  | 'sepa_direct_debit'
+  | 'direct_debit'
+  | 'credit_card'
+  | 'debit_card'
+  | 'online_payment'
+  | 'cash'
+  | 'cheque'
+  | 'other';
+
+/** Named constants for {@link ComplianceInvoicePaymentMeans}, e.g. `PaymentMeans.ONLINE_PAYMENT`. */
+export const PaymentMeans = {
+  SEPA_CREDIT_TRANSFER: 'sepa_credit_transfer',
+  CREDIT_TRANSFER: 'credit_transfer',
+  SEPA_DIRECT_DEBIT: 'sepa_direct_debit',
+  DIRECT_DEBIT: 'direct_debit',
+  CREDIT_CARD: 'credit_card',
+  DEBIT_CARD: 'debit_card',
+  ONLINE_PAYMENT: 'online_payment',
+  CASH: 'cash',
+  CHEQUE: 'cheque',
+  OTHER: 'other',
+} as const satisfies Record<string, ComplianceInvoicePaymentMeans>;
+
+/** Every accepted {@link ComplianceInvoicePaymentMeans}. */
+export const COMPLIANCE_PAYMENT_MEANS: readonly ComplianceInvoicePaymentMeans[] = Object.values(PaymentMeans);
+
 /** Countries served over plain Peppol BIS 3.0 (besides Norway, which has its own input). */
 export type PeppolEInvoicingCountry = 'BE' | 'NL' | 'AT' | 'IE' | 'DK' | 'SE' | 'FI' | 'EE' | 'GB';
 
@@ -467,11 +501,19 @@ export interface CreateComplianceTransactionInput extends ComplianceTransactionB
   counterpartyCountry?: string;
   counterpartyVatNumber?: string;
   providerContactId?: string;
-  /** Payment means code; required for cross-border outbound. */
-  paymentMethod?: number;
+  /**
+   * How the invoice is or was paid (see {@link PaymentMeans}); required for cross-border outbound (France). Germany:
+   * defaults to SEPA credit transfer to the IBAN stored on the enrollment. A raw provider id (number) still works.
+   */
+  paymentMethod?: ComplianceInvoicePaymentMeans | number;
   remittanceInformation?: string;
   paymentMethodText?: string;
   paymentTerms?: string;
+  /**
+   * Amount already paid (e.g. a shop order paid at checkout). The e-invoice shows it as prepaid; the amount due becomes
+   * total minus this (0 when fully paid). Cannot exceed the total.
+   */
+  paidAmount?: number;
   /**
    * Your own reference (order number, ERP id), max 100 chars. Stored for your search
    * only — never sent to the buyer or the tax authority.
@@ -498,10 +540,19 @@ export interface UpdateComplianceTransactionInput extends ComplianceTransactionB
   providerContactId?: string;
   /** When set: at least one invoice line, each with at least one tax. */
   invoiceLines?: ComplianceInvoiceLineInput[];
-  paymentMethod?: number;
+  /**
+   * How the invoice is or was paid (see {@link PaymentMeans}); required for cross-border outbound (France). Germany:
+   * defaults to SEPA credit transfer to the IBAN stored on the enrollment. A raw provider id (number) still works.
+   */
+  paymentMethod?: ComplianceInvoicePaymentMeans | number;
   remittanceInformation?: string;
   paymentMethodText?: string;
   paymentTerms?: string;
+  /**
+   * Amount already paid (e.g. a shop order paid at checkout). The e-invoice shows it as prepaid; the amount due becomes
+   * total minus this (0 when fully paid). Cannot exceed the total.
+   */
+  paidAmount?: number;
   /**
    * Your own reference (order number, ERP id), max 100 chars. Stored for your search
    * only — never sent to the buyer or the tax authority. An empty string clears it.
@@ -1922,7 +1973,31 @@ export class EReportingEndpoint {
     if (input.counterpartyCountry !== undefined) body['counterparty_country'] = input.counterpartyCountry.toUpperCase();
     if (input.counterpartyVatNumber !== undefined) body['counterparty_vat_number'] = input.counterpartyVatNumber;
     if (input.providerContactId !== undefined) body['provider_contact_id'] = input.providerContactId;
-    if (input.paymentMethod !== undefined) body['payment_method'] = input.paymentMethod;
+    if (input.paymentMethod !== undefined) {
+      if (typeof input.paymentMethod === 'string' && !COMPLIANCE_PAYMENT_MEANS.includes(input.paymentMethod)) {
+        throw new TaxoraException(
+          `Invalid paymentMethod "${String(input.paymentMethod)}". Expected one of: ${COMPLIANCE_PAYMENT_MEANS.join(', ')}.`,
+        );
+      }
+      if (
+        (input.paymentMethod === 'online_payment' || input.paymentMethod === 'other') &&
+        (input.paymentMethodText ?? '').trim() === ''
+      ) {
+        throw new TaxoraException(
+          `paymentMethod "${input.paymentMethod}" needs paymentMethodText, e.g. "PayPal" or "Klarna".`,
+        );
+      }
+      body['payment_method'] = input.paymentMethod;
+    }
+    if (input.paidAmount !== undefined) {
+      if (!Number.isFinite(input.paidAmount) || input.paidAmount < 0) {
+        throw new TaxoraException('paidAmount must be a non-negative number.');
+      }
+      if (input.total !== undefined && input.paidAmount > input.total + 0.005) {
+        throw new TaxoraException('paidAmount cannot be higher than total.');
+      }
+      body['paid_amount'] = input.paidAmount;
+    }
     if (input.remittanceInformation !== undefined) body['remittance_information'] = input.remittanceInformation;
     if (input.paymentMethodText !== undefined) body['payment_method_text'] = input.paymentMethodText;
     if (input.paymentTerms !== undefined) body['payment_terms'] = input.paymentTerms;
