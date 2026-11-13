@@ -95,8 +95,10 @@ export type ComplianceInvoiceDelivery = 'email' | 'download';
 
 /**
  * How an invoice is (or was) paid — the `paymentMethod` transaction field; it becomes the payment means code (EN 16931
- * BT-81) in the e-invoice. `online_payment` (PayPal, Klarna, Stripe, …) and `other` need `paymentMethodText`.
- * `credit_card` / `debit_card` are refused for a German XRechnung (card details needed) — use `online_payment` there.
+ * BT-81, UNTDID 4461) in the e-invoice. See {@link PaymentMeans} for what each value covers.
+ *
+ * Rule of thumb for shops: paid at checkout through a payment provider (PayPal, Klarna, Stripe, Adyen, Mollie, Apple
+ * Pay, …) → `online_payment` with the provider's name in `paymentMethodText`, plus `paidAmount`.
  */
 export type ComplianceInvoicePaymentMeans =
   | 'sepa_credit_transfer'
@@ -112,15 +114,36 @@ export type ComplianceInvoicePaymentMeans =
 
 /** Named constants for {@link ComplianceInvoicePaymentMeans}, e.g. `PaymentMeans.ONLINE_PAYMENT`. */
 export const PaymentMeans = {
+  /** Bank transfer in EUR to your IBAN ("Überweisung"). Germany: default when an IBAN is stored. Code 58. */
   SEPA_CREDIT_TRANSFER: 'sepa_credit_transfer',
+  /** Bank transfer outside SEPA, e.g. a domestic NOK transfer in Norway. Code 30. */
   CREDIT_TRANSFER: 'credit_transfer',
+  /** SEPA direct debit under a mandate ("Lastschrift", "Bankeinzug"). Code 59. */
   SEPA_DIRECT_DEBIT: 'sepa_direct_debit',
+  /** Direct debit outside SEPA, e.g. Norwegian AvtaleGiro. Code 49. */
   DIRECT_DEBIT: 'direct_debit',
+  /**
+   * Credit card charged directly (Visa, Mastercard, Amex), e.g. at a card terminal; name the scheme in
+   * `paymentMethodText`. Code 54. Refused for a German XRechnung (card details required) — use `ONLINE_PAYMENT`.
+   */
   CREDIT_CARD: 'credit_card',
+  /** Debit / bank card (girocard, Maestro, V Pay, BankAxept). Code 48. Refused for a German XRechnung. */
   DEBIT_CARD: 'debit_card',
+  /**
+   * Paid through an online payment service or checkout provider: PayPal, Klarna (pay now / later / instalments),
+   * Stripe, Adyen, Mollie, Apple Pay, Google Pay, Amazon Pay, Vipps / MobilePay, Twint, iDEAL, Sofort, giropay,
+   * Trustly — also a card payment made at checkout through such a provider. Needs `paymentMethodText` with the
+   * provider's name ("PayPal", "Klarna", "Kreditkarte via Stripe"). Code ZZZ.
+   */
   ONLINE_PAYMENT: 'online_payment',
+  /** Cash, e.g. cash on delivery ("Nachnahme") or at a shop counter. Code 10. */
   CASH: 'cash',
+  /** Cheque. Code 20. */
   CHEQUE: 'cheque',
+  /**
+   * Anything else: gift card or voucher, store credit, set-off against a credit note ("Verrechnung"). Needs
+   * `paymentMethodText`. Code ZZZ.
+   */
   OTHER: 'other',
 } as const satisfies Record<string, ComplianceInvoicePaymentMeans>;
 

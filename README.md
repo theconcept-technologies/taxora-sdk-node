@@ -973,6 +973,41 @@ if (tx.pdfUrl !== null) {
 }
 ```
 
+### 💳 Payment method & already paid (all e-invoicing countries)
+
+`paymentMethod` says how the invoice is or was paid (`PaymentMeans.*`, type `ComplianceInvoicePaymentMeans`). It
+becomes the payment means code in the e-invoice. For shop orders paid at checkout, also set `paidAmount`: the
+invoice then shows the amount as prepaid and **nothing as due**.
+
+| Value                  | Use it for                                                                                                                                                                                                                                                                                                                                           | Code in the e-invoice |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| `sepa_credit_transfer` | Bank transfer in EUR to your IBAN ("Überweisung"). Germany: default when an IBAN is stored on the enrollment                                                                                                                                                                                                                                         | 58                    |
+| `credit_transfer`      | Bank transfer outside SEPA, e.g. a domestic NOK transfer in Norway                                                                                                                                                                                                                                                                                   | 30                    |
+| `sepa_direct_debit`    | SEPA direct debit under a mandate ("Lastschrift")                                                                                                                                                                                                                                                                                                    | 59                    |
+| `direct_debit`         | Direct debit outside SEPA, e.g. Norwegian AvtaleGiro                                                                                                                                                                                                                                                                                                 | 49                    |
+| `credit_card`          | Credit card charged directly (Visa, Mastercard, Amex), e.g. at a card terminal                                                                                                                                                                                                                                                                       | 54                    |
+| `debit_card`           | Debit / bank card (girocard, Maestro, V Pay, BankAxept)                                                                                                                                                                                                                                                                                              | 48                    |
+| `online_payment`       | Paid through an online payment service or checkout provider: **PayPal, Klarna (pay now / later / instalments), Stripe, Adyen, Mollie, Apple Pay, Google Pay, Amazon Pay, Vipps / MobilePay, Twint, iDEAL, Sofort, giropay, Trustly**, and card payments made at checkout through such a provider. Needs `paymentMethodText` with the provider's name | ZZZ ("PayPal")        |
+| `cash`                 | Cash, e.g. cash on delivery ("Nachnahme")                                                                                                                                                                                                                                                                                                            | 10                    |
+| `cheque`               | Cheque                                                                                                                                                                                                                                                                                                                                               | 20                    |
+| `other`                | Anything else: gift card or voucher, store credit, set-off against a credit note. Needs `paymentMethodText`                                                                                                                                                                                                                                          | ZZZ                   |
+
+**Rule of thumb for shops:** if the customer paid at checkout through a payment provider, use `ONLINE_PAYMENT` with the
+provider's name, even when they paid by card on Stripe or Adyen. The card values are for a card that is charged
+directly. A German XRechnung refuses the card values, because the card details would be required; `ONLINE_PAYMENT`
+works there.
+
+```ts
+import { PaymentMeans } from '@taxora/sdk';
+
+const tx = await client.eReporting.createTransaction({
+  // … enrollment, invoice number, amounts, lines, buyer …
+  paymentMethod: PaymentMeans.ONLINE_PAYMENT,
+  paymentMethodText: 'PayPal', // the provider's name, as the buyer knows it
+  paidAmount: 119, // already paid at checkout → nothing due
+});
+```
+
 ### 🇩🇪 E-Invoicing Germany (ZUGFeRD / XRechnung)
 
 EN 16931 e-invoices for buyers in Germany. B2B invoices are sent by email as ZUGFeRD (Factur-X, PDF/A-3 with
