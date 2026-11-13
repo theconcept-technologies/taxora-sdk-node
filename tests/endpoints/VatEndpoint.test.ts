@@ -12,6 +12,10 @@ import { Language } from '../../src/enums/Language.js';
 import { HttpException } from '../../src/exceptions/HttpException.js';
 import { ValidationException } from '../../src/exceptions/ValidationException.js';
 import { RetryPolicy } from '../../src/http/RetryPolicy.js';
+import { TaxoraException } from '../../src/exceptions/TaxoraException.js';
+import { VatRegisterFacts } from '../../src/dto/VatRegisterFacts.js';
+import { RegisterFactsStatus } from '../../src/enums/RegisterFactsStatus.js';
+import { registerNoteText } from '../../src/dto/RegisterFacts.js';
 
 const BASE_URL = 'https://sandbox.taxora.io/v1';
 const API_KEY = 'test-api-key';
@@ -565,5 +569,157 @@ describe('VatEndpoint local tax numbers report', () => {
     await expect(endpoint.localTaxNumbersCsv({ dateFrom: '2026-10-23', dateTo: '2026-10-01' })).rejects.toBeInstanceOf(
       ValidationException,
     );
+  });
+});
+
+describe('VatEndpoint.registerFacts', () => {
+  const UUID = '5f0c6a3e-1111-4c4c-9d9d-000000000001';
+
+  it('reads only the cache by default', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        success: true,
+        data: {
+          country: 'FR',
+          register: 'bodacc',
+          available: true,
+          siren: '123456789',
+          status: 'not_checked',
+          checkedAt: null,
+          retryAfter: null,
+          canRetry: true,
+          note: null,
+          announcements: [],
+        },
+      }),
+    ]);
+
+    const facts = await endpoint.registerFacts(UUID);
+
+    expect(facts).toBeInstanceOf(VatRegisterFacts);
+    expect(facts.status).toBe(RegisterFactsStatus.NOT_CHECKED);
+    expect(facts.found()).toBe(false);
+    expect(facts.available).toBe(true);
+    expect(facts.canRetry).toBe(true);
+    expect(facts.register).toBe('bodacc');
+    expect(facts.siren).toBe('123456789');
+    expect(facts.note).toBeUndefined();
+    expect(client.requests[0]?.method).toBe('GET');
+    expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/history/${UUID}/register-facts`);
+  });
+
+  it('fetches and returns the note and the timeline', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        success: true,
+        data: {
+          country: 'FR',
+          register: 'bodacc',
+          available: true,
+          siren: '123456789',
+          status: 'found',
+          checkedAt: '2026-11-12T10:00:00+00:00',
+          retryAfter: '2026-11-19T10:00:00+00:00',
+          canRetry: false,
+          note: {
+            event: 'struck_off_merger',
+            meaning: 'vat_ceased_vies_lag',
+            action: 'use_successor_vat',
+            warning: null,
+            severity: 'error',
+            params: { date: '2026-06-30', related: ['ABSORBANTE SA'], successorVat: 'FR83987654321' },
+            source: {
+              register: 'bodacc',
+              id: 'A202601234567',
+              date: '2026-07-04',
+              url: 'https://www.bodacc.fr/annonce/detail/A202601234567',
+            },
+            text: { en: 'Struck off after a merger.', de: 'Nach einer Fusion gelöscht.' },
+          },
+          announcements: [
+            {
+              id: 'A202601234567',
+              date: '2026-07-04',
+              kind: 'struck_off',
+              severity: 'error',
+              url: 'https://www.bodacc.fr/annonce/detail/A202601234567',
+            },
+            'not-an-announcement',
+          ],
+        },
+      }),
+    ]);
+
+    const facts = await endpoint.registerFacts(UUID, { fetch: true });
+
+    expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/history/${UUID}/register-facts?fetch=1`);
+    expect(facts.found()).toBe(true);
+    expect(facts.retryAfter).toBe('2026-11-19T10:00:00+00:00');
+    expect(facts.canRetry).toBe(false);
+    expect(facts.note?.event).toBe('struck_off_merger');
+    expect(facts.note?.severity).toBe('error');
+    expect(facts.note?.params.successorVat).toBe('FR83987654321');
+    expect(registerNoteText(facts.note!, Language.GERMAN)).toBe('Nach einer Fusion gelöscht.');
+    expect(facts.announcements).toEqual([
+      {
+        id: 'A202601234567',
+        date: '2026-07-04',
+        kind: 'struck_off',
+        severity: 'error',
+        url: 'https://www.bodacc.fr/annonce/detail/A202601234567',
+      },
+    ]);
+    expect(facts.toArray()['status']).toBe('found');
+  });
+
+  it('refresh also fetches', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        success: true,
+        data: { country: 'ES', register: 'borme', available: true, status: 'error', canRetry: true },
+      }),
+    ]);
+
+    const facts = await endpoint.registerFacts(UUID, { refresh: true });
+
+    expect(client.requests[0]?.url).toBe(`${BASE_URL}/vat/history/${UUID}/register-facts?fetch=1&refresh=1`);
+    expect(facts.status).toBe(RegisterFactsStatus.ERROR);
+    expect(facts.canRetry).toBe(true);
+  });
+
+  it('maps an unavailable country and an unknown status', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        success: true,
+        data: { country: 'DE', register: null, available: false, status: 'unavailable', note: null, announcements: [] },
+      }),
+      SequenceHttpClient.jsonResponse({ success: true, data: { status: 'something_new' } }),
+    ]);
+
+    const unavailable = await endpoint.registerFacts(UUID);
+    expect(unavailable.status).toBe(RegisterFactsStatus.UNAVAILABLE);
+    expect(unavailable.available).toBe(false);
+    expect(unavailable.register).toBeUndefined();
+
+    expect((await endpoint.registerFacts(UUID)).status).toBe(RegisterFactsStatus.UNKNOWN);
+  });
+
+  it('throws HttpException for an unknown check and does not retry it', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({ success: false, message: 'VAT history entry not found.' }, 404),
+    ]);
+
+    const error = await endpoint.registerFacts('missing').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).statusCode).toBe(404);
+    expect(client.requests).toHaveLength(1);
+  });
+
+  it('refuses an empty uuid before the request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(endpoint.registerFacts('  ')).rejects.toThrow(TaxoraException);
+    expect(client.requests).toHaveLength(0);
   });
 });

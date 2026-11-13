@@ -7,6 +7,7 @@ export type { TaxoraClientOptions } from './client/TaxoraClient.js';
 export { AuthEndpoint } from './endpoints/AuthEndpoint.js';
 export { CompanyEndpoint } from './endpoints/CompanyEndpoint.js';
 export { VatEndpoint } from './endpoints/VatEndpoint.js';
+export type { VatRegisterFactsOptions } from './endpoints/VatEndpoint.js';
 export { SmartEnrichmentEndpoint } from './endpoints/SmartEnrichmentEndpoint.js';
 export type {
   SmartEnrichmentInput,
@@ -86,6 +87,23 @@ export type {
   SmartEnrichmentOfficialAddress,
   SmartEnrichmentTaxNumberSource,
 } from './dto/SmartEnrichmentResource.js';
+export {
+  toRegisterFacts,
+  toRegisterNote,
+  toRegisterPublication,
+  toRegisterPublications,
+  registerNoteText,
+} from './dto/RegisterFacts.js';
+export type {
+  RegisterFacts,
+  RegisterNote,
+  RegisterNoteParams,
+  RegisterPublication,
+  RegisterProceeding,
+  RegisterSource,
+  RegisterSeverity,
+} from './dto/RegisterFacts.js';
+export { VatRegisterFacts } from './dto/VatRegisterFacts.js';
 export { SmartEnrichmentJob } from './dto/SmartEnrichmentJob.js';
 export { SmartEnrichmentRecheck, SmartEnrichmentRecheckState } from './dto/SmartEnrichmentRecheck.js';
 export type {
@@ -153,6 +171,7 @@ export { Environment, getBaseUrl } from './enums/Environment.js';
 export type { Environment as EnvironmentType } from './enums/Environment.js';
 export { ApiVersion } from './enums/ApiVersion.js';
 export { Language } from './enums/Language.js';
+export { RegisterFactsStatus, toRegisterFactsStatus } from './enums/RegisterFactsStatus.js';
 export { LoginIdentifier } from './enums/LoginIdentifier.js';
 export { VatState, getFailedVatStates, describeVatState } from './enums/VatState.js';
 export {

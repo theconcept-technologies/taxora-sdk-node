@@ -4,6 +4,7 @@ import {
   toSmartEnrichmentRejectionReason,
 } from '../enums/SmartEnrichmentRejectionReason.js';
 import { type SmartEnrichmentStatus, toSmartEnrichmentStatus } from '../enums/SmartEnrichmentStatus.js';
+import { type RegisterFacts, type RegisterNote, toRegisterFacts, toRegisterNote } from './RegisterFacts.js';
 
 /** What one AI provider independently concluded, when more than one searched. */
 export interface SmartEnrichmentProviderVerdict {
@@ -169,6 +170,18 @@ export class SmartEnrichmentResource {
     public readonly recheckCount: number | undefined = undefined,
     /** When it was last checked again (ISO 8601). */
     public readonly lastRecheckedAt: string | undefined = undefined,
+    /**
+     * Spain and France: what the official commercial register (BORME / BODACC) says about the
+     * company — newly founded, extinct after a merger, struck off, insolvency … Explains why a VAT ID
+     * may not (yet / any more) be valid; never changes the status. Undefined when there is nothing to tell.
+     */
+    public readonly registerFacts: RegisterFacts | undefined = undefined,
+    /**
+     * The explanation of `registerFacts` for your customer: what happened, what it means for the VAT
+     * ID, what to do, the official source and the finished text in English and German
+     * (`registerNoteText(note, 'de')`).
+     */
+    public readonly registerNote: RegisterNote | undefined = undefined,
   ) {}
 
   /** True when the register knows the number under a different name than the one requested. */
@@ -234,6 +247,8 @@ export class SmartEnrichmentResource {
         : undefined,
       num('recheckCount'),
       text('lastRecheckedAt'),
+      toRegisterFacts(data['registerFacts']),
+      toRegisterNote(data['registerNote']),
     );
   }
 
@@ -265,6 +280,8 @@ export class SmartEnrichmentResource {
       taxNumberSource: this.taxNumberSource ?? null,
       recheckCount: this.recheckCount ?? null,
       lastRecheckedAt: this.lastRecheckedAt ?? null,
+      registerFacts: this.registerFacts ?? null,
+      registerNote: this.registerNote ?? null,
     };
   }
 }

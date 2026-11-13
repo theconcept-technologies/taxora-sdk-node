@@ -4,6 +4,7 @@ import { SmartEnrichmentRecheck, type SmartEnrichmentRecheckOptions } from '../d
 import { SmartEnrichmentHistoryPage } from '../dto/SmartEnrichmentHistoryPage.js';
 import { SmartEnrichmentStatistics, type SmartEnrichmentStatisticsInterval } from '../dto/SmartEnrichmentStatistics.js';
 import { type SmartEnrichmentStatus } from '../enums/SmartEnrichmentStatus.js';
+import { Language } from '../enums/Language.js';
 import { HttpException } from '../exceptions/HttpException.js';
 import { describeApiError, jsonErrorMessage } from '../exceptions/apiErrorMessage.js';
 import { TaxoraException } from '../exceptions/TaxoraException.js';
@@ -14,6 +15,7 @@ import { withResponseRetries } from '../http/withRetries.js';
 import { type TokenStorageInterface } from '../http/TokenStorageInterface.js';
 
 const STATISTICS_INTERVALS: readonly SmartEnrichmentStatisticsInterval[] = ['day', 'week', 'month'];
+const EXPORT_LOCALES: readonly Language[] = Object.values(Language);
 
 const DEFAULT_POLL_INTERVAL_MS = 2000;
 const DEFAULT_POLL_TIMEOUT_MS = 120_000;
@@ -67,6 +69,12 @@ export interface SmartEnrichmentExportOptions {
   status?: SmartEnrichmentStatus[];
   /** Only include rows that resolved to a VAT number. */
   onlyFound?: boolean;
+  /**
+   * Language of the `registerNote` column ('en', the API default, or 'de'). Spanish and French rows
+   * explain there what the official commercial register (BORME / BODACC) says happened;
+   * `registerSourceUrl` links the publication.
+   */
+  locale?: Language;
 }
 
 export interface SmartEnrichmentStatisticsOptions {
@@ -263,6 +271,11 @@ export class SmartEnrichmentEndpoint {
    * (UTF-8, BOM included by the API so Excel opens umlauts correctly).
    */
   async export(options: SmartEnrichmentExportOptions = {}): Promise<string> {
+    if (options.locale !== undefined && !EXPORT_LOCALES.includes(options.locale)) {
+      throw new TaxoraException(
+        `Invalid export locale "${String(options.locale)}". Expected one of: ${EXPORT_LOCALES.join(', ')}.`,
+      );
+    }
     const params = new URLSearchParams();
     if (options.dateFrom !== undefined) params.set('date_from', options.dateFrom);
     if (options.dateTo !== undefined) params.set('date_to', options.dateTo);
@@ -271,6 +284,7 @@ export class SmartEnrichmentEndpoint {
       params.append('status[]', status);
     }
     if (options.onlyFound !== undefined) params.set('only_found', options.onlyFound ? '1' : '0');
+    if (options.locale !== undefined) params.set('locale', options.locale);
 
     const queryString = params.toString();
     const url = `${this.baseUrl}/smart-enrichment/export${queryString ? `?${queryString}` : ''}`;

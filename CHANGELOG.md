@@ -4,6 +4,26 @@ All notable changes to `@taxora/sdk` are documented here. Versions follow [SemVe
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-11-14
+
+**Requires API version 1.135.0** — do not release before that API version is live.
+
+### Added
+
+- **Register facts for a VAT check:** `vat.registerFacts(uuid, { fetch, refresh })` →
+  `GET /v1/vat/history/{uuid}/register-facts` as `VatRegisterFacts` — what the official commercial register says about
+  a checked company (France: BODACC by SIREN, Spain: BORME): struck off, merged, sold, insolvency proceedings, newly
+  registered, renamed, moved, with `note` and the `announcements` timeline. Without options only a cached result is
+  returned (`not_checked` when there is none); `refresh: true` retries after a register `error` and implies `fetch`.
+  Status as `RegisterFactsStatus` (`found`, `empty`, `error`, `not_checked`, `unavailable`; unknown values map to
+  `unknown`).
+- **Smart Enrichment results:** `SmartEnrichmentResource.registerFacts` (`RegisterFacts`) and `registerNote`
+  (`RegisterNote`: `event`, `meaning`, `action`, `warning`, `severity`, `params`, `source`, `text.en` / `text.de`), also
+  in `toArray()`. `registerNoteText(note, locale)` picks the text with English fallback; `toRegisterFacts()` /
+  `toRegisterNote()` parse raw payloads.
+- **CSV export:** `smartEnrichment.export({ locale: 'en' | 'de' })` sets the language of the new `registerNote` column
+  (next to `registerSourceUrl`); an unknown locale is refused before the request.
+
 ## [1.13.0] - 2026-11-13
 
 ### Added

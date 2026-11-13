@@ -2,6 +2,7 @@ import { VatResource } from '../dto/VatResource.js';
 import { VatCollection } from '../dto/VatCollection.js';
 import { VatCertificateExport } from '../dto/VatCertificateExport.js';
 import { VatValidationAddressInput } from '../dto/VatValidationAddressInput.js';
+import { VatRegisterFacts } from '../dto/VatRegisterFacts.js';
 import {
   type LocalTaxNumberReportOptions,
   type LocalTaxNumberRow,
@@ -19,6 +20,13 @@ import { withRetries } from '../http/withRetries.js';
 import { type TokenStorageInterface } from '../http/TokenStorageInterface.js';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+export interface VatRegisterFactsOptions {
+  /** Ask the register when nothing is cached. Without it only a cached result comes back (`not_checked` when there is none). */
+  fetch?: boolean;
+  /** Retry right away after a register `error`; implies `fetch`. */
+  refresh?: boolean;
+}
 
 export class VatEndpoint {
   constructor(
@@ -91,6 +99,34 @@ export class VatEndpoint {
       const data = await this.parseJsonResponse(response);
 
       return VatCollection.fromResponse(data);
+    });
+  }
+
+  /**
+   * What the official commercial register says about the company of a finished VAT check — France
+   * via BODACC (by the SIREN in the VAT ID), Spain via BORME: struck off, merged, sold, insolvency
+   * proceedings, newly registered, renamed, moved. On demand only; never part of the validation.
+   *
+   * By default only a cached result is returned (status `not_checked` when there is none) and the
+   * register is not contacted. `fetch: true` asks the register when nothing is cached; `refresh: true`
+   * retries right away after a register error (and implies `fetch`).
+   *
+   * @param uuid the VAT check (history entry) uuid, e.g. `VatResource.uuid`
+   */
+  async registerFacts(uuid: string, options: VatRegisterFactsOptions = {}): Promise<VatRegisterFacts> {
+    if (uuid.trim() === '') {
+      throw new TaxoraException('uuid must not be empty.');
+    }
+    const params = new URLSearchParams();
+    if (options.fetch === true || options.refresh === true) params.set('fetch', '1');
+    if (options.refresh === true) params.set('refresh', '1');
+    const url = this.withQuery(`${this.baseUrl}/vat/history/${encodeURIComponent(uuid.trim())}/register-facts`, params);
+
+    return withRetries(this.retryPolicy, 'VAT register facts', async () => {
+      const response = await this.sendRequest('GET', url);
+      const data = await this.parseJsonResponse(response);
+
+      return VatRegisterFacts.fromArray(data);
     });
   }
 

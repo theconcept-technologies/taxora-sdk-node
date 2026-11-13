@@ -162,6 +162,7 @@ Each endpoint handles:
 | `SireneLookupResult`        | Company data from the French SIRENE registry                                                    |
 | `RegistryCompany`           | Company from a national register (Norway: Brønnøysund) — org number, VAT / register flags       |
 | `PeppolLookupResult`        | Peppol directory lookup: `status` (reachable / not_reachable / pending), document types         |
+| `VatRegisterFacts`          | Commercial register facts for a VAT check (`status`, `note`, `announcements`)                   |
 
 All DTOs expose `toArray()` for serialization and a static `fromArray()` factory.
 
@@ -310,6 +311,30 @@ for (const entry of history) {
 const results = await client.vat.search('Alpha Handels', 25 /* perPage */);
 ```
 
+### Register facts (France, Spain)
+
+What the official commercial register says about a checked company — France via BODACC (by the SIREN in the VAT
+ID), Spain via BORME: struck off, merged, sold, insolvency proceedings, newly registered, renamed, moved. On demand
+only; never part of the validation.
+
+```ts
+import { Language, RegisterFactsStatus, registerNoteText } from '@taxora/sdk';
+
+const vat = await client.vat.validate('FR40123456789');
+
+// Without options only a cached result comes back ('not_checked' when there is none).
+// `fetch: true` asks the register; `refresh: true` retries right away after an 'error'.
+const facts = await client.vat.registerFacts(vat.uuid!, { fetch: true });
+if (facts.status === RegisterFactsStatus.FOUND && facts.note) {
+  console.log(facts.note.event, facts.note.severity); // 'struck_off_merger' 'error'
+  console.log(registerNoteText(facts.note, Language.ENGLISH));
+}
+for (const a of facts.announcements) {
+  console.log(a.date, a.kind, a.url); // the register timeline
+}
+// facts.status: 'found' | 'empty' | 'error' | 'not_checked' | 'unavailable'
+```
+
 ---
 
 ## 🧾 Local tax numbers report
@@ -432,6 +457,21 @@ for (const candidate of result?.rejectedCandidates ?? []) {
   console.log(candidate.vatNumber, candidate.reason); // e.g. 'vat_invalid'
 }
 
+// Spain and France: what the official commercial register (BORME / BODACC) says about the company —
+// newly founded, extinct after a merger, struck off, sold, insolvency proceedings … It explains why a
+// VAT ID may not (yet / any more) be valid and never changes the status. `registerNote` puts it in
+// three parts (codes + finished text in English and German) with the official publication;
+// `warning` flags French insolvency proceedings, also on 'found' results.
+const note = result?.registerNote;
+if (note) {
+  console.log(note.event, note.meaning, note.action); // 'founded_by_split' 'vat_not_active_yet' 'ask_roi_and_recheck'
+  console.log(note.severity); // 'error' | 'warning' | 'info' | 'neutral'
+  console.log(registerNoteText(note, Language.GERMAN)); // or note.text.en / note.text.de
+  console.log(note.source?.url); // the BORME / BODACC publication
+  if (note.warning) console.log('Insolvency proceedings: check open items'); // insolvency_liquidation | …
+}
+console.log(result?.registerFacts?.status ?? '—', result?.registerFacts?.successors ?? []); // structured facts
+
 // Bulk lookup (always async → webhook + polling)
 // The batch-level mode applies to every row; a row carrying its own `mode` overrides it,
 // so you can pay for 'complex' on just the rows that need it.
@@ -490,7 +530,7 @@ Download your lookups as CSV in the bulk-input shape plus the resolved VAT colum
 are flattened to one line per input row). All filters are optional.
 
 ```ts
-import { SmartEnrichmentStatus } from '@taxora/sdk';
+import { Language, SmartEnrichmentStatus } from '@taxora/sdk';
 import { writeFileSync } from 'fs';
 
 const csv = await client.smartEnrichment.export({
@@ -499,9 +539,13 @@ const csv = await client.smartEnrichment.export({
   minConfidence: 80, // 0–100
   status: [SmartEnrichmentStatus.FOUND, SmartEnrichmentStatus.NO_VAT_EXISTS],
   onlyFound: true, // only rows that resolved to a VAT number
+  locale: Language.GERMAN, // language of the registerNote column: 'en' (default) | 'de'
 });
 writeFileSync('smart-enrichment.csv', csv);
 ```
+
+Spanish and French rows carry `registerNote` (what the commercial register says, as text) and `registerSourceUrl`
+(the BORME / BODACC publication) as the last two columns.
 
 ### Statistics
 

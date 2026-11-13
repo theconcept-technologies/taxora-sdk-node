@@ -13,6 +13,8 @@ import { SmartEnrichmentRejectionReason } from '../../src/enums/SmartEnrichmentR
 import { HttpException } from '../../src/exceptions/HttpException.js';
 import { TaxoraException } from '../../src/exceptions/TaxoraException.js';
 import { ValidationException } from '../../src/exceptions/ValidationException.js';
+import { Language } from '../../src/enums/Language.js';
+import { registerNoteText, toRegisterNote } from '../../src/dto/RegisterFacts.js';
 
 const BASE_URL = 'https://sandbox.taxora.io/v1';
 const API_KEY = 'test-api-key';
@@ -1126,5 +1128,169 @@ describe('SmartEnrichmentEndpoint.recheck', () => {
     expect(job.results[0]?.lastRecheckedAt).toBe('2026-10-25T10:00:00+00:00');
     expect(job.results[1]?.recheckCount).toBeUndefined();
     expect(job.results[0]?.toArray()['recheckCount']).toBe(1);
+  });
+});
+
+describe('SmartEnrichmentEndpoint register facts', () => {
+  const BORME_URL = 'https://www.boe.es/diario_borme/txt.php?id=BORME-A-2026-182-46';
+
+  it('exposes registerFacts and registerNote on a not-found row', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        jobId: 'job-borme',
+        status: 'not_found',
+        vatNumber: null,
+        country: 'ES',
+        rejectedCandidates: [{ vatNumber: 'ESB93983641', reason: 'vat_invalid' }],
+        registerFacts: {
+          source: 'borme',
+          status: 'newly_founded',
+          companyName: 'DIRESA MAS BAR SOCIEDAD LIMITADA',
+          incorporatedOn: '2026-09-02',
+          dissolvedOn: null,
+          extinctOn: null,
+          reason: null,
+          successors: [],
+          predecessors: ['DISTRIBUCIONES REGION ESTE SOCIEDAD ANONIMA', ''],
+          predecessorRole: 'split',
+          predecessorsExtinct: true,
+          province: 'VALENCIA/VALÈNCIA',
+          publications: [{ id: 'BORME-A-2026-182-46', entry: 422979, date: '2026-09-21', url: BORME_URL }],
+        },
+        registerNote: {
+          event: 'founded_by_split',
+          meaning: 'vat_not_active_yet',
+          action: 'ask_roi_and_recheck',
+          warning: null,
+          severity: 'info',
+          params: {
+            date: '2026-09-02',
+            related: ['DISTRIBUCIONES REGION ESTE SOCIEDAD ANONIMA'],
+            relatedExtinct: true,
+            vatNumber: 'ESB93983641',
+            newName: null,
+            previousName: null,
+          },
+          source: { register: 'borme', id: 'BORME-A-2026-182-46', date: '2026-09-21', url: BORME_URL },
+          text: { en: 'Founded on 2 Sep 2026 by a split.', de: 'Gegründet am 02.09.2026 durch Abspaltung.' },
+        },
+      }),
+    ]);
+
+    const result = (await endpoint.lookup({ companyName: 'Diresa Mas Bar SL', country: 'ES' })).result();
+
+    expect(result?.registerFacts).toEqual({
+      source: 'borme',
+      status: 'newly_founded',
+      companyName: 'DIRESA MAS BAR SOCIEDAD LIMITADA',
+      incorporatedOn: '2026-09-02',
+      successors: [],
+      predecessors: ['DISTRIBUCIONES REGION ESTE SOCIEDAD ANONIMA'],
+      predecessorRole: 'split',
+      predecessorsExtinct: true,
+      province: 'VALENCIA/VALÈNCIA',
+      publications: [{ id: 'BORME-A-2026-182-46', entry: 422979, date: '2026-09-21', url: BORME_URL }],
+    });
+    const note = result?.registerNote;
+    expect(note?.event).toBe('founded_by_split');
+    expect(note?.meaning).toBe('vat_not_active_yet');
+    expect(note?.action).toBe('ask_roi_and_recheck');
+    expect(note?.warning).toBeNull();
+    expect(note?.severity).toBe('info');
+    expect(note?.params.vatNumber).toBe('ESB93983641');
+    expect(note?.source).toEqual({ register: 'borme', id: 'BORME-A-2026-182-46', date: '2026-09-21', url: BORME_URL });
+    expect(registerNoteText(note!)).toBe('Founded on 2 Sep 2026 by a split.');
+    expect(registerNoteText(note!, Language.GERMAN)).toBe('Gegründet am 02.09.2026 durch Abspaltung.');
+    expect(result?.toArray()['registerNote']).toEqual(note);
+    expect((result?.toArray()['registerFacts'] as { status: string }).status).toBe('newly_founded');
+  });
+
+  it('keeps a found row found and carries the insolvency warning', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        jobId: 'job-bodacc',
+        status: 'found',
+        vatNumber: 'FR40123456789',
+        country: 'FR',
+        registerFacts: {
+          source: 'bodacc',
+          siren: '123456789',
+          status: 'insolvency',
+          date: '2026-10-01',
+          partial: false,
+          proceeding: { type: 'redressement', since: '2026-10-01' },
+          publications: [
+            {
+              id: 'A202602042782',
+              date: '2026-10-03',
+              url: 'https://www.bodacc.fr/annonce/detail/A202602042782',
+              kind: 'proceeding_opened',
+            },
+          ],
+        },
+        registerNote: {
+          event: 'insolvency_redressement',
+          meaning: 'vat_unaffected_by_proceedings',
+          action: 'check_open_items',
+          warning: 'insolvency_redressement',
+          severity: 'warning',
+          params: { warningDate: '2026-10-01', successorVat: null },
+          source: { register: 'bodacc', id: 'A202602042782', date: '2026-10-03' },
+          text: { en: 'Receivership since 1 Oct 2026.' },
+        },
+      }),
+    ]);
+
+    const result = (await endpoint.lookup({ companyName: 'Exemple SAS', country: 'FR' })).result();
+
+    expect(result?.status).toBe(SmartEnrichmentStatus.FOUND);
+    expect(result?.registerFacts?.proceeding).toEqual({ type: 'redressement', since: '2026-10-01' });
+    expect(result?.registerFacts?.partial).toBe(false);
+    expect(result?.registerFacts?.publications[0]?.kind).toBe('proceeding_opened');
+    expect(result?.registerNote?.warning).toBe('insolvency_redressement');
+    expect(result?.registerNote?.severity).toBe('warning');
+    // German text missing → English fallback.
+    expect(registerNoteText(result!.registerNote!, Language.GERMAN)).toBe('Receivership since 1 Oct 2026.');
+  });
+
+  it('leaves both undefined when absent or malformed', async () => {
+    const { endpoint } = makeEndpoint([
+      SequenceHttpClient.jsonResponse({
+        jobId: 'job-plain',
+        status: 'found',
+        vatNumber: 'ATU12345678',
+        registerFacts: { status: 'extinct' },
+        registerNote: { event: '', severity: 'loud' },
+      }),
+    ]);
+
+    const result = (await endpoint.lookup({ companyName: 'Example GmbH', country: 'AT' })).result();
+
+    expect(result?.registerFacts).toBeUndefined();
+    expect(result?.registerNote).toBeUndefined();
+    expect(result?.toArray()['registerNote']).toBeNull();
+  });
+
+  it('defaults an unknown severity to neutral', () => {
+    expect(toRegisterNote({ event: 'moved', severity: 'loud' })?.severity).toBe('neutral');
+  });
+});
+
+describe('SmartEnrichmentEndpoint.export locale', () => {
+  it('sends the registerNote language', async () => {
+    const { endpoint, client } = makeEndpoint([
+      SequenceHttpClient.textResponse('header-only', 200, 'text/csv; charset=UTF-8'),
+    ]);
+
+    await endpoint.export({ onlyFound: false, locale: Language.GERMAN });
+
+    expect(client.requests[0]!.url).toBe(`${BASE_URL}/smart-enrichment/export?only_found=0&locale=de`);
+  });
+
+  it('refuses an unknown locale before the request', async () => {
+    const { endpoint, client } = makeEndpoint([]);
+
+    await expect(endpoint.export({ locale: 'fr' as Language })).rejects.toThrow(TaxoraException);
+    expect(client.requests).toHaveLength(0);
   });
 });
